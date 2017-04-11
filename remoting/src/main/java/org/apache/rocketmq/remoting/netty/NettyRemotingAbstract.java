@@ -47,18 +47,38 @@ import org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Rpc调用基础实现类
+ */
 public abstract class NettyRemotingAbstract {
+
     private static final Logger PLOG = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
 
+    /**
+     * 用于控制Oneway调用上限数的信号量
+     */
     protected final Semaphore semaphoreOneway;
 
+    /**
+     * 用于控制异步调用上限数的信号量
+     */
     protected final Semaphore semaphoreAsync;
 
+    /**
+     * 响应Table，用于表示请求与响应，可作超时处理
+     * <p>
+     *     requestId -> ResponseFuture
+     * </p>
+     */
     protected final ConcurrentHashMap<Integer /* opaque */, ResponseFuture> responseTable =
         new ConcurrentHashMap<Integer, ResponseFuture>(256);
 
+    /**
+     * 请求处理Table
+     */
     protected final HashMap<Integer/* request code */, Pair<NettyRequestProcessor, ExecutorService>> processorTable =
         new HashMap<Integer, Pair<NettyRequestProcessor, ExecutorService>>(64);
+
     protected final NettyEventExecuter nettyEventExecuter = new NettyEventExecuter();
 
     protected Pair<NettyRequestProcessor, ExecutorService> defaultRequestProcessor;
@@ -74,13 +94,23 @@ public abstract class NettyRemotingAbstract {
         this.nettyEventExecuter.putNettyEvent(event);
     }
 
+    /**
+     * 接收消息
+     * @param ctx netty channel上下文
+     * @param msg 已序列化的msg
+     * @throws Exception
+     */
     public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
         final RemotingCommand cmd = msg;
         if (cmd != null) {
             switch (cmd.getType()) {
+
+                // 请求RPC
                 case REQUEST_COMMAND:
                     processRequestCommand(ctx, cmd);
                     break;
+
+                // 响应RPC
                 case RESPONSE_COMMAND:
                     processResponseCommand(ctx, cmd);
                     break;
@@ -90,6 +120,9 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**
+     * 处理请求命令
+     */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
@@ -178,6 +211,9 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**
+     * 处理响应命令
+     */
     public void processResponseCommand(ChannelHandlerContext ctx, RemotingCommand cmd) {
         final int opaque = cmd.getOpaque();
         final ResponseFuture responseFuture = responseTable.get(opaque);
@@ -236,6 +272,9 @@ public abstract class NettyRemotingAbstract {
 
     abstract public ExecutorService getCallbackExecutor();
 
+    /**
+     * 扫描响应表
+     */
     public void scanResponseTable() {
         final List<ResponseFuture> rfList = new LinkedList<ResponseFuture>();
         Iterator<Entry<Integer, ResponseFuture>> it = this.responseTable.entrySet().iterator();
@@ -389,6 +428,12 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**
+     * Netty时间处理器
+     * <p>
+     *     通过<strong>LinkedBlockingQueue</strong>来add和poll事件
+     * </p>
+     */
     class NettyEventExecuter extends ServiceThread {
         private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<NettyEvent>();
         private final int maxSize = 10000;

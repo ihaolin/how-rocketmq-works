@@ -38,6 +38,12 @@ import org.apache.rocketmq.srvutil.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * NameServer启动类
+ * <p>
+ *     org.apache.rocketmq.namesrv.NamesrvStartup -c /path/to/ns.properties
+ * </p>
+ */
 public class NamesrvStartup {
     public static Properties properties = null;
     public static CommandLine commandLine = null;
@@ -47,13 +53,17 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController main0(String[] args) {
+
+        // 设置RPC调用中的MQ版本号
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
+            // socket 发送buffer大小
             NettySystemConfig.socketSndbufSize = 4096;
         }
 
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_RCVBUF_SIZE)) {
+            // socket 接收buffer大小
             NettySystemConfig.socketRcvbufSize = 4096;
         }
 
@@ -73,6 +83,8 @@ public class NamesrvStartup {
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
             nettyServerConfig.setListenPort(9876);
             if (commandLine.hasOption('c')) {
+
+                // 从配置文件解析配置
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
                     InputStream in = new BufferedInputStream(new FileInputStream(file));
@@ -89,11 +101,14 @@ public class NamesrvStartup {
             }
 
             if (commandLine.hasOption('p')) {
+
+                // 打印可配置项
                 MixAll.printObjectProperties(null, namesrvConfig);
                 MixAll.printObjectProperties(null, nettyServerConfig);
                 System.exit(0);
             }
 
+            // 将命令行参数设置到namesrvConfig中
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
 
             if (null == namesrvConfig.getRocketmqHome()) {
@@ -102,6 +117,7 @@ public class NamesrvStartup {
                 System.exit(-2);
             }
 
+            // $ROCKETMQ_HOME/conf/logback_namesrv.xml为日志配置文件
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
             configurator.setContext(lc);
@@ -109,9 +125,11 @@ public class NamesrvStartup {
             configurator.doConfigure(namesrvConfig.getRocketmqHome() + "/conf/logback_namesrv.xml");
             final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+            // 打印配置
             MixAll.printObjectProperties(log, namesrvConfig);
             MixAll.printObjectProperties(log, nettyServerConfig);
 
+            // 初始化NamesrvController
             final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
             // remember all configs to prevent discard
