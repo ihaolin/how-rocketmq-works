@@ -429,7 +429,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * Netty时间处理器
+     * Netty事件处理器
      * <p>
      *     通过<strong>LinkedBlockingQueue</strong>来add和poll事件
      * </p>

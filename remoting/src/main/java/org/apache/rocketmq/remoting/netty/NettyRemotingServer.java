@@ -145,9 +145,13 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector).channel(NioServerSocketChannel.class)
+                // 最大积压的客户端连接数
                 .option(ChannelOption.SO_BACKLOG, 1024)
+                // 让端口释放后立即就可以被再次使用(http://www.cnblogs.com/mydomain/archive/2011/08/23/2150567.html)
                 .option(ChannelOption.SO_REUSEADDR, true)
+                // 开启KeepAlive，http://www.tldp.org/HOWTO/html_single/TCP-Keepalive-HOWTO/#overview
                 .option(ChannelOption.SO_KEEPALIVE, false)
+                // 防止当数据包太小时，发生ack delay问题(http://jerrypeng.me/2013/08/mythical-40ms-delay-and-tcp-nodelay/)
                 .childOption(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize())
                 .option(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize())
@@ -170,6 +174,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
 
         try {
+            // 开始监听
             ChannelFuture sync = this.serverBootstrap.bind().sync();
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
             this.port = addr.getPort();
@@ -298,6 +303,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * Netty连接事件处理器
+     */
     class NettyConnetManageHandler extends ChannelDuplexHandler {
         @Override
         public void channelRegistered(ChannelHandlerContext ctx) throws Exception {

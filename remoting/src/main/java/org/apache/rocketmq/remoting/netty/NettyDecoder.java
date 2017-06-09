@@ -26,6 +26,12 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 将byte[]解码为RemotingCommand
+ * <p>
+ *     这里使用了LengthFieldBasedFrameDecoder，并初始化super(FRAME_MAX_LENGTH, 0, 4, 0, 4)，只会解析第5个字节开始的有效数据
+ * </p>
+ */
 public class NettyDecoder extends LengthFieldBasedFrameDecoder {
     private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
     private static final int FRAME_MAX_LENGTH = //

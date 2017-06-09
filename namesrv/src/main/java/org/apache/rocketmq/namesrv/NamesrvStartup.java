@@ -129,12 +129,12 @@ public class NamesrvStartup {
             MixAll.printObjectProperties(log, namesrvConfig);
             MixAll.printObjectProperties(log, nettyServerConfig);
 
-            // 初始化NamesrvController
             final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
+            // 初始化NamesrvController
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
@@ -160,6 +160,7 @@ public class NamesrvStartup {
                 }
             }, "ShutdownHook"));
 
+            // 启动NamesrvController
             controller.start();
 
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();

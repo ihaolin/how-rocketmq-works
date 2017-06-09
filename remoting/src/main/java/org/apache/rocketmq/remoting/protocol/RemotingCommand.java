@@ -32,14 +32,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class RemotingCommand {
-    public static final String SERIALIZE_TYPE_PROPERTY = "rocketmq.serialize.type";
-    public static final String SERIALIZE_TYPE_ENV = "ROCKETMQ_SERIALIZE_TYPE";
+
+    private static final String SERIALIZE_TYPE_PROPERTY = "rocketmq.serialize.type";
+
+    private static final String SERIALIZE_TYPE_ENV = "ROCKETMQ_SERIALIZE_TYPE";
+
     public static final String REMOTING_VERSION_KEY = "rocketmq.remoting.version";
-    private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
+
     private static final int RPC_TYPE = 0; // 0, REQUEST_COMMAND
+
     private static final int RPC_ONEWAY = 1; // 0, RPC
+
     private static final Map<Class<? extends CommandCustomHeader>, Field[]> CLASS_HASH_MAP =
         new HashMap<Class<? extends CommandCustomHeader>, Field[]>();
+
     private static final Map<Class, String> CANONICAL_NAME_CACHE = new HashMap<Class, String>();
     // 1, Oneway
     // 1, RESPONSE_COMMAND
@@ -54,10 +60,16 @@ public class RemotingCommand {
     private static final String BOOLEAN_CANONICAL_NAME_1 = Boolean.class.getCanonicalName();
     private static final String BOOLEAN_CANONICAL_NAME_2 = boolean.class.getCanonicalName();
     private static volatile int configVersion = -1;
+
+    /**
+     * 请求ID生成器
+     */
     private static AtomicInteger requestId = new AtomicInteger(0);
 
+    /**
+     * 初始化序列化类型
+     */
     private static SerializeType serializeTypeConfigInThisServer = SerializeType.JSON;
-
     static {
         final String protocol = System.getProperty(SERIALIZE_TYPE_PROPERTY, System.getenv(SERIALIZE_TYPE_ENV));
         if (!isBlank(protocol)) {
@@ -69,18 +81,57 @@ public class RemotingCommand {
         }
     }
 
-    private int code;
-    private LanguageCode language = LanguageCode.JAVA;
-    private int version = 0;
-    private int opaque = requestId.getAndIncrement();
-    private int flag = 0;
-    private String remark;
-    private HashMap<String, String> extFields;
-    private transient CommandCustomHeader customHeader;
+    ///// 以下为请求头字段
 
+    /**
+     * 请求码
+     */
+    private int code;
+
+    /**
+     * 语言类型
+     */
+    private LanguageCode language = LanguageCode.JAVA;
+
+    /**
+     * 版本号
+     */
+    private int version = 0;
+
+    /**
+     * 请求ID，与ResponseCommand对应
+     */
+    private int opaque = requestId.getAndIncrement();
+
+    /**
+     * 标记
+     */
+    private int flag = 0;
+
+    /**
+     * 备注
+     */
+    private String remark;
+
+    /**
+     * 扩展字段
+     */
+    private HashMap<String, String> extFields;
+
+    /**
+     * 序列化类型
+     */
     private SerializeType serializeTypeCurrentRPC = serializeTypeConfigInThisServer;
 
+    /**
+     * Body数据
+     */
     private transient byte[] body;
+
+    /**
+     * 定制Header
+     */
+    private transient CommandCustomHeader customHeader;
 
     protected RemotingCommand() {
     }
@@ -141,13 +192,20 @@ public class RemotingCommand {
     }
 
     public static RemotingCommand decode(final ByteBuffer byteBuffer) {
+
+        // 数据总长度
         int length = byteBuffer.limit();
+
+        // 序列化类型字节 + header长度
         int oriHeaderLen = byteBuffer.getInt();
+
+        // 获取header长度
         int headerLength = getHeaderLength(oriHeaderLen);
 
         byte[] headerData = new byte[headerLength];
         byteBuffer.get(headerData);
 
+        // 解析出header
         RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
 
         int bodyLength = length - 4 - headerLength;
@@ -326,6 +384,28 @@ public class RemotingCommand {
         return name;
     }
 
+    /**
+     * 协议格式：
+     * <p>
+     <ul>
+        <li>
+            4 bytes：总字节长度 = 4 + header.length + body.length
+        </li>
+        <li>
+            1 byte：序列化类型(0：JSON，1：ROCKETMQ)
+        </li>
+        <li>
+            3 bytes：header字节长度，2的24次方，即header数据最大16M，body数据最大4G - 16M
+        </li>
+        <li>
+            header bytes：header数据
+        </li>
+        <li>
+            body bytes：body数据
+        </li>
+     </ul>
+     * </p>
+     */
     public ByteBuffer encode() {
         // 1> header length size
         int length = 4;
@@ -344,7 +424,7 @@ public class RemotingCommand {
         // length
         result.putInt(length);
 
-        // header length
+        // header length = 序列化类型(1 byte) + header数据长度(3 byte)
         result.put(markProtocolType(headerData.length, serializeTypeCurrentRPC));
 
         // header data
@@ -361,16 +441,26 @@ public class RemotingCommand {
     }
 
     private byte[] headerEncode() {
+
+        // 将定制header放入extFields
         this.makeCustomHeaderToNet();
+
         if (SerializeType.ROCKETMQ == serializeTypeCurrentRPC) {
+            // ROCKETMQ序列化
             return RocketMQSerializable.rocketMQProtocolEncode(this);
         } else {
+            // JSON序列化
             return RemotingSerializable.encode(this);
         }
     }
 
+    /**
+     * 将customHeader对象的各字段放入extFields，随header传输
+     */
     public void makeCustomHeaderToNet() {
+
         if (this.customHeader != null) {
+            // 将定制Header的字段放入extFields
             Field[] fields = getClazzFields(customHeader.getClass());
             if (null == this.extFields) {
                 this.extFields = new HashMap<String, String>();
