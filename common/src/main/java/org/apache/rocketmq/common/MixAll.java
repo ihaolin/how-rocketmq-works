@@ -46,47 +46,90 @@ import org.apache.rocketmq.common.annotation.ImportantField;
 import org.apache.rocketmq.common.help.FAQUrl;
 import org.slf4j.Logger;
 
+/**
+ * 通用工具类
+ */
 public class MixAll {
+
     public static final String ROCKETMQ_HOME_ENV = "ROCKETMQ_HOME";
+
     public static final String ROCKETMQ_HOME_PROPERTY = "rocketmq.home.dir";
+
     public static final String NAMESRV_ADDR_ENV = "NAMESRV_ADDR";
+
     public static final String NAMESRV_ADDR_PROPERTY = "rocketmq.namesrv.addr";
+
     public static final String MESSAGE_COMPRESS_LEVEL = "rocketmq.message.compressLevel";
+
     public static final String DEFAULT_NAMESRV_ADDR_LOOKUP = "jmenv.tbsite.net";
+
     public static final String WS_DOMAIN_NAME = System.getProperty("rocketmq.namesrv.domain", DEFAULT_NAMESRV_ADDR_LOOKUP);
+
     public static final String WS_DOMAIN_SUBGROUP = System.getProperty("rocketmq.namesrv.domain.subgroup", "nsaddr");
+
     // http://jmenv.tbsite.net:8080/rocketmq/nsaddr
     public static final String WS_ADDR = "http://" + WS_DOMAIN_NAME + ":8080/rocketmq/" + WS_DOMAIN_SUBGROUP;
+
     public static final String DEFAULT_TOPIC = "TBW102";
+
     public static final String BENCHMARK_TOPIC = "BenchmarkTest";
+
     public static final String DEFAULT_PRODUCER_GROUP = "DEFAULT_PRODUCER";
+
     public static final String DEFAULT_CONSUMER_GROUP = "DEFAULT_CONSUMER";
+
     public static final String TOOLS_CONSUMER_GROUP = "TOOLS_CONSUMER";
+
     public static final String FILTERSRV_CONSUMER_GROUP = "FILTERSRV_CONSUMER";
+
     public static final String MONITOR_CONSUMER_GROUP = "__MONITOR_CONSUMER";
+
     public static final String CLIENT_INNER_PRODUCER_GROUP = "CLIENT_INNER_PRODUCER";
+
     public static final String SELF_TEST_PRODUCER_GROUP = "SELF_TEST_P_GROUP";
+
     public static final String SELF_TEST_CONSUMER_GROUP = "SELF_TEST_C_GROUP";
+
     public static final String SELF_TEST_TOPIC = "SELF_TEST_TOPIC";
+
     public static final String OFFSET_MOVED_EVENT = "OFFSET_MOVED_EVENT";
+
     public static final String ONS_HTTP_PROXY_GROUP = "CID_ONS-HTTP-PROXY";
+
     public static final String CID_ONSAPI_PERMISSION_GROUP = "CID_ONSAPI_PERMISSION";
+
     public static final String CID_ONSAPI_OWNER_GROUP = "CID_ONSAPI_OWNER";
+
     public static final String CID_ONSAPI_PULL_GROUP = "CID_ONSAPI_PULL";
+
     public static final String CID_RMQ_SYS_PREFIX = "CID_RMQ_SYS_";
 
     public static final List<String> LOCAL_INET_ADDRESS = getLocalInetAddress();
+
     public static final String LOCALHOST = localhost();
+
     public static final String DEFAULT_CHARSET = "UTF-8";
+
     public static final long MASTER_ID = 0L;
+
     public static final long CURRENT_JVM_PID = getPID();
 
+    /**
+     * 重试队列前缀名
+     */
     public static final String RETRY_GROUP_TOPIC_PREFIX = "%RETRY%";
 
+    /**
+     * 延迟队列前缀名
+     */
     public static final String DLQ_GROUP_TOPIC_PREFIX = "%DLQ%";
+
     public static final String SYSTEM_TOPIC_PREFIX = "rmq_sys_";
+
     public static final String UNIQUE_MSG_QUERY_FLAG = "_UNIQUE_KEY_QUERY";
+
     public static final String DEFAULT_TRACE_REGION_ID = "DefaultRegion";
+
     public static final String CONSUME_CONTEXT_TYPE = "ConsumeContextType";
 
     public static String getRetryTopic(final String consumerGroup) {

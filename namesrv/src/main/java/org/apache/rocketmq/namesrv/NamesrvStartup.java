@@ -68,7 +68,6 @@ public class NamesrvStartup {
         }
 
         try {
-            //PackageConflictDetect.detectFastjson();
 
             Options options = ServerUtil.buildCommandlineOptions(new Options());
             commandLine =
