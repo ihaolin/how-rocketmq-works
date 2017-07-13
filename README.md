@@ -6,7 +6,7 @@
 
 文档大致分为几个部分：
 
-1. [RocketMQ_基础知识](share/01_RocketMQ_基础知识.md)；
+1. [RocketMQ_基础](share/01_RocketMQ_基础.md)；
 2. [RocketMQ_通信](share/02_RocketMQ_通信.md)；
 3. [RocketMQ\_消息_生产](share/03_RocketMQ_消息_模型.md)；
 4. [RocketMQ\_消息_生产](share/04_RocketMQ_消息_生产.md)；
