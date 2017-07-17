@@ -50,6 +50,34 @@ RocketMQ | Java, .NET, C++| Pull,TCP,JMS | 无热点严格有序 | ✅ | ✅ | �
 
 ## RocketMQ 关键特性
 
+### 1.单机支持1万以上持久化队列
+
+RocketMQ中消息存储的逻辑视图：
+
+![](screenshots/rmq-msg-store-logic-view.png)
+
+如图所示，消息存储方案大致为：
+
+1. 所有数据单独存储到一个**Commit Log**，完全**顺序写**，**随机读**；
+2. 对最终用户可见的消费队列(**Consume Queue**)，实际只存储消息在CommitLog的位置(**offset**)信息，并且**串行方式**刷盘；
+
+这样做的优势在于：
+
+1. 队列轻量化，单个队列数据量非常少；
+2. 对磁盘的访问串行化，避免磁盘竟争，并且会因为队列增加导致IOWAIT增高。
+
+但上述方案仍面临几个问题：
+
+1. 对于**Commit Log**，写虽然是**顺序写**，但是读却发成了**随机读**；
+2. 读一条消息，会先读**Consume Queue**，再读**Commit Log**，增加了开销；
+3. 要保证**Commit Log**与**Consume Queue**完全的一致，增加了编程的复杂度。
+
+如何解决上述几个问题：
+
+1. 随机读，尽可能让读命中**PAGECACHE**，减少IO读操作，所以系统内存越大越好。如果系统中堆积的消息过多，读数据要访问磁盘会不会由于随机读导致系统性能急剧下降，答案是否定的：
+
+	+ 访问**PAGECACHE**时，即使只访问1k的消息，系统也会提前**预读**出更多数据，在下次读时，就有可能命中内存；
+	+ 随机访问**Commit Log**磁盘数据，系统IO调度算法设置为[NOOP](https://en.wikipedia.org/wiki/Noop_scheduler)方式，会在一定程度上将**完全随机读**发成**顺序跳跃方式**，而顺序跳跃方式读较完全的随机读性能会高5倍以上。
 
 ## 参考文献
 
@@ -61,4 +89,6 @@ RocketMQ | Java, .NET, C++| Pull,TCP,JMS | 无热点严格有序 | ✅ | ✅ | �
 
 + [RocketMQ开发指南](rokectmq_dev_guide.pdf)；
 
-+ [随机读 vs 顺序读](http://www.violin-memory.com/blog/understanding-io-random-vs-sequential/)。
++ [随机读 vs 顺序读](http://www.violin-memory.com/blog/understanding-io-random-vs-sequential/)；
+
++ [磁盘I/O那些事](https://tech.meituan.com/about-desk-io.html)。
