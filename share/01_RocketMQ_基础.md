@@ -92,7 +92,7 @@ RocketMQ中消息存储的逻辑视图：
 
 RocketMQ支持两种刷盘策略：同步刷盘和异步刷盘。
 
-#### 异步刷盘
+#### 2.1 异步刷盘
 
 ![](screenshots/rmq-store-flush-disk-async.png)
 
@@ -105,7 +105,7 @@ RocketMQ支持两种刷盘策略：同步刷盘和异步刷盘。
   + 写入消息到**PAGE CACHE**时，如果内存不足，则尝试丢弃干净的PAGE，腾出内存供新消息使用，策略是**LRU**方式；
   + 如果干净页不足，此时写入**PAGE CACHE**会被阻塞，系统尝试刷盘部分数据，大约每次尝试32个PAGE，来找出更多干净 PAGE。
 
-#### 同步刷盘
+#### 2.2 同步刷盘
 
 ![](screenshots/rmq-store-flush-disk-sync.png)
 
@@ -114,6 +114,74 @@ RocketMQ支持两种刷盘策略：同步刷盘和异步刷盘。
 1. 写入**PAGE CACHE**后，线程等待，通知刷盘线程刷盘；
 2. 刷盘线程刷盘后，唤醒前端等待线程，可能是一批线程；
 3. 前端等待线程吐用户返回成功。
+
+### 3.消息查询
+
+#### 3.1 按照Message Id查询消息
+
+**Message Id**组成：
+
+![](screenshots/rmq-store-msg-id.png)
+
++ **MsgId**总共16字节，包含消息存储主机地址，消息Commit Log offset。从MsgId中解析出Broker的地址和Commit Log的偏移地址，然后按照存储格式所在位置消息buffer解析成一个完整的消息。
+
+#### 3.2 按照Message Key查询消息
+
+**Message Key**索引逻辑结构(类似**HashMap**)：
+
+![](screenshots/rmq-store-msg-key-index-view.png)
+
+查询逻辑大致如下：
+
+1. 根据查询的key的`hashcode%slotNum`得到具体的槽的位置(**slotNum**是一个索引文件里面包含的最大槽的数目，例如图中所示 slotNum=5000000)；
+2. 根据**slotValue**(slot位置对应的值)查找到索引项列表的最后一项(倒序排列，slotValue总是指向最新的一个索引项)；
+3. 遍历索引项列表，返回查询时间范围内的结果集(默讣一次最大返回的32条记彔)；
+4. **Hash 冲突**；寻找key的slot位置时相当亍执行了两次散列函数，一次key的hash，一次key的hash值取模，因此这里存在两次冲突的情况：
+  + 第一种，key的hash值不同但模数相同，此时查询的时候会在比较一次key的hash值(每个索引项保存了key的hash值)，过滤掉hash值不相等的项；
+  + 第二种，hash值相等但key不等，出亍性能的考虑冲突的检测放到客户端处理(key的原始值是存储在消息文件中的，避免对数据文件的解析)，客户端比较一次消息体的key是否相同。
+5. 存储；为了节省空间索引项中存储的时间是**时间差值**(存储时间-开始时间，开始时间存储在索引文件头中)。
+
+### 4.服务端消息过滤
+
+RocketMQ的消息过滤方式有别于其他消息中间件，是在订阅时，再做过滤，可先看下**Consume Queue**的存储结构：
+
+![](screenshots/rmq-store-consume-queue-unit.png)
+
+1. 在Broker端进行**Message Tag**比对，先遍历**Consume Queue**，如果存储的Message Tag与订阅的Message Tag不符合，则跳过，继续比对下一个，符合则传输给Consumer(注意：Message Tag是字符串形式，Consume Queue中存储的是其对应的hashcode，比对时也是比对hashcode)；
+2. Consumer收到过滤后的消息后，同样也要执行在Broker端的操作，但是比对的是原始的Message Tag字符串，而不是Hashcode。
+
+上面这样做，主要出于以下考虑：
+
+  + Message Tag存储Hashcode，是为了在Consume Queue定长方式存储，节约空间；
+  + 过滤过程中不会访问Commit Log数据，可以保证堆积情况下也能高效过滤；
+  + 即使Message Tag存在Hash冲突，也可以在Consumer端过滤时进行修正，保证万无一失。
+
+### 5.长轮询 Pull
+
+RocketMQ的Consumer都是从Broker拉消息来消费，但是为了能做到实时收消息，RocketMQ使用**长轮询**方式，可以保证消息实时性同Push方式一致。
+
+> 原理其实比较简单，即在Consumer发起拉取请求后，若服务端未发现有新消息，则将本次请求延迟一段时间再返回给Consumer，若延迟的这段时间内，有新消息产生，会立即返回给客户端。
+
+### 6.顺序消息
+
+#### 6.1 顺序消息原理
+
+![](screenshots/rmq-msg-orderly.png)
+
+#### 6.2 顺序消息缺点
+
++ 发送顺序消息无法利用集群**FailOver**特性；
++ 消费顺序消息的并行度依赖于队列数量；
++ **队列热点问题**，个别队列由于哈希不均导致消息过多，消费速度跟不上，产生消息堆积问题；
++ 遇到消息失败的消息，无法跳过，当前队列消费暂停。
+
+### 7.事务消息
+
+事务消息原理图：
+
+![](screenshots/rmq-msg-transaction.png)
+
+
 
 ## 参考文献
 
@@ -129,4 +197,6 @@ RocketMQ支持两种刷盘策略：同步刷盘和异步刷盘。
 
 + [磁盘I/O那些事](https://tech.meituan.com/about-desk-io.html)；
 
-+ [Page Cache基础](https://www.thomas-krenn.com/en/wiki/Linux_Page_Cache_Basics)。
++ [Page Cache Basics](https://www.thomas-krenn.com/en/wiki/Linux_Page_Cache_Basics)；
+
++ [Page Cache, the Affair Between Memory and Files](http://duartes.org/gustavo/blog/post/page-cache-the-affair-between-memory-and-files/)。
