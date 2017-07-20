@@ -209,10 +209,12 @@ public class RemotingCommand {
         // 反序列化header数据，并构建RemotingCommand对象
         RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
 
+        // body长度
         int bodyLength = length - 4 - headerLength;
         byte[] bodyData = null;
         if (bodyLength > 0) {
             bodyData = new byte[bodyLength];
+            // 填充body数据
             byteBuffer.get(bodyData);
         }
         cmd.body = bodyData;

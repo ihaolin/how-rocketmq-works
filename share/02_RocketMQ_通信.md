@@ -82,13 +82,13 @@ flag | 通信标志位，如RPC类型 | 通信标志位，如RPC类型
 remark | 自定义文本信息 | 错误详细描述信息
 extFields | 各类请求的自定义字段 | 各类响应的自定义字段
 
-### 序列化与反序列化
+### 协议编码与解码(codec)
 
-请求/响应命令序列化与反序列化均在`RemotingCommand`中实现。
+请求/响应命令编码与解码均在`RemotingCommand`中实现。
 
-#### 序列化
+#### 协议编码(encode)
 
-序列化主要在`RemotingCommand`的`encode`方法中实现：
+**协议编码**主要在`RemotingCommand`的`encode`方法中实现：
 
 ```java
 // RemotingCommand.java
@@ -199,7 +199,97 @@ public static byte[] markProtocolType(int source, SerializeType type) {
 }
 ```
 
-#### 反序列化
+#### 协议解码(decode)
 
-反序列化主要在`RemotingCommand`的`decode`方法中实现：
+**协议解码**主要在`RemotingCommand`的`decode`方法中实现：
+
+```java
+// RemotingCommand.java
+public static RemotingCommand decode(final ByteBuffer byteBuffer) {
+
+    // 数据总长度
+    int length = byteBuffer.limit();
+
+    // 序列化类型字节(1 byte) + header长度(3 byte)
+    int oriHeaderLen = byteBuffer.getInt();
+
+    // 获取header长度
+    int headerLength = getHeaderLength(oriHeaderLen);
+
+    byte[] headerData = new byte[headerLength];
+    // 填充header数据
+    byteBuffer.get(headerData);
+
+    // 反序列化header数据，并构建RemotingCommand对象
+    RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
+
+    // body长度
+    int bodyLength = length - 4 - headerLength;
+    byte[] bodyData = null;
+    if (bodyLength > 0) {
+        bodyData = new byte[bodyLength];
+        // 填充body数据
+        byteBuffer.get(bodyData);
+    }
+    cmd.body = bodyData;
+
+    return cmd;
+}
+
+// 获取header真实长度
+public static int getHeaderLength(int length) {
+    return length & 0xFFFFFF;
+}
+
+// 获取序列化类型
+public static SerializeType getProtocolType(int source) {
+    return SerializeType.valueOf((byte) ((source >> 24) & 0xFF));
+}
+
+// 反序列化header，并构建RemotingCommand
+private static RemotingCommand headerDecode(byte[] headerData, SerializeType type) {
+    switch (type) {
+        case JSON:
+            // JSON反序列化
+            RemotingCommand resultJson = RemotingSerializable.decode(headerData, RemotingCommand.class);
+            resultJson.setSerializeTypeCurrentRPC(type);
+            return resultJson;
+        case ROCKETMQ:
+            // RocketMQ反序列化
+            RemotingCommand resultRMQ = RocketMQSerializable.rocketMQProtocolDecode(headerData);
+            resultRMQ.setSerializeTypeCurrentRPC(type);
+            return resultRMQ;
+        default:
+            break;
+    }
+
+    return null;
+}
+```
+
+<font color="red">注意</font>：在`decode`时，并没有获取对应`encode`后第一个字节(即**数据总长度**)，这是因为**RocketMQ**在使用Netty通信时，定制了解码器[NettyDecoder](../remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettyDecoder.java)，该类继承自**LengthFieldBasedFrameDecoder**(该Decoder很适合用于解析header中含有数据长度的二进制消息)，并且可见其初始化为：
+
+```java
+// NettyDecoder.java
+public class NettyDecoder extends LengthFieldBasedFrameDecoder {
+
+	//...
+	public NettyDecoder() {
+        // 设置前4个字节表示数据总长度，并从第5个字节开始截取数据，并填充buffer
+        super(FRAME_MAX_LENGTH, 0, 4, 0, 4);
+   }
+}
+```
+
+### 序列化与反序列化
+
+由上文可知，RocketMQ中支持两种序列化：**JSON**和**ROCKETMQ**。
+
+#### JSON
+
+**JSON**序列化使用的是**fastjson 1.2.29**。
+
+#### ROCKETMQ
+
+**ROCKETMQ**是自定义的一套序列化方式，具体实现可见类[RocketMQSerializable](../remoting/src/main/java/org/apache/rocketmq/remoting/protocol/RocketMQSerializable.java)，格式如图所示：
 
