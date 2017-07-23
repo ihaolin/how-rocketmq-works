@@ -129,6 +129,10 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+
+        // 初始化Client
+
+        // 初始化线程池
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(//
             nettyClientConfig.getClientWorkerThreads(), //
             new ThreadFactory() {
@@ -141,7 +145,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        // 初始化Bootstrap
         Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker).channel(NioSocketChannel.class)//
+            // 禁止tcp delay
             .option(ChannelOption.TCP_NODELAY, true)
             .option(ChannelOption.SO_KEEPALIVE, false)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, nettyClientConfig.getConnectTimeoutMillis())
@@ -152,10 +158,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 public void initChannel(SocketChannel ch) throws Exception {
                     ch.pipeline().addLast(
                         defaultEventExecutorGroup,
+                        // 协议编码
                         new NettyEncoder(),
+                        // 协议解码
                         new NettyDecoder(),
                         new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
                         new NettyConnectManageHandler(),
+                        // 该处理器用于响应前置处理
                         new NettyClientHandler());
                 }
             });
@@ -164,6 +173,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             @Override
             public void run() {
                 try {
+                    // 扫描超时的响应
                     NettyRemotingClient.this.scanResponseTable();
                 } catch (Exception e) {
                     log.error("scanResponseTable exception", e);
@@ -329,14 +339,18 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
+
+        // 获取netty通道，不存在则创建
         final Channel channel = this.getAndCreateChannel(addr);
         if (channel != null && channel.isActive()) {
             try {
                 if (this.rpcHook != null) {
+                    // 请求前钩子
                     this.rpcHook.doBeforeRequest(addr, request);
                 }
                 RemotingCommand response = this.invokeSyncImpl(channel, request, timeoutMillis);
                 if (this.rpcHook != null) {
+                    // 请求后钩子
                     this.rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(channel), request, response);
                 }
                 return response;
@@ -346,6 +360,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 throw e;
             } catch (RemotingTimeoutException e) {
                 if (nettyClientConfig.isClientCloseSocketIfTimeout()) {
+                    // 超时关闭通道
                     this.closeChannel(addr, channel);
                     log.warn("invokeSync: close socket because of timeout, {}ms, {}", timeoutMillis, addr);
                 }
@@ -353,6 +368,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 throw e;
             }
         } else {
+            // 关闭通道
             this.closeChannel(addr, channel);
             throw new RemotingConnectException(addr);
         }

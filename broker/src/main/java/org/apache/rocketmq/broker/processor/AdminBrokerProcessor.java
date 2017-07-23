@@ -200,11 +200,16 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
     }
 
     private RemotingCommand updateAndCreateTopic(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
+
+        // 构建响应对象
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+
+        // 解析CreateTopicRequestHeader对象
         final CreateTopicRequestHeader requestHeader =
             (CreateTopicRequestHeader) request.decodeCommandCustomHeader(CreateTopicRequestHeader.class);
         log.info("updateAndCreateTopic called by {}", RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
 
+        // 不能使用broker集群名称作为topic
         if (requestHeader.getTopic().equals(this.brokerController.getBrokerConfig().getBrokerClusterName())) {
             String errorMsg = "the topic[" + requestHeader.getTopic() + "] is conflict with system reserved words.";
             log.warn(errorMsg);
@@ -218,6 +223,7 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
             response.setOpaque(request.getOpaque());
             response.markResponseType();
             response.setRemark(null);
+            // 这里已作出响应
             ctx.writeAndFlush(response);
         } catch (Exception e) {
         }
@@ -229,8 +235,13 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         topicConfig.setPerm(requestHeader.getPerm());
         topicConfig.setTopicSysFlag(requestHeader.getTopicSysFlag() == null ? 0 : requestHeader.getTopicSysFlag());
 
+        // 持久化topic
         this.brokerController.getTopicConfigManager().updateTopicConfig(topicConfig);
+
+        // 注册当前broker到NameServer
         this.brokerController.registerBrokerAll(false, true);
+
+        // 外部不再作响应
         return null;
     }
 

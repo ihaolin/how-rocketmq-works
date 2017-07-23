@@ -124,8 +124,14 @@ public abstract class NettyRemotingAbstract {
      * 处理请求命令
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
+
+        // 根据请求code，获取请求线程池处理器
+        // 可见BrokerController.registerProcessor()方法中的注册过程
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
+
+        // 使用默认请求线程池处理器
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
+
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
@@ -133,17 +139,23 @@ public abstract class NettyRemotingAbstract {
                 @Override
                 public void run() {
                     try {
+
+                        // 执行前置钩子
                         RPCHook rpcHook = NettyRemotingAbstract.this.getRPCHook();
                         if (rpcHook != null) {
                             rpcHook.doBeforeRequest(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
                         }
 
+                        // 处理请求
                         final RemotingCommand response = pair.getObject1().processRequest(ctx, cmd);
+
+                        // 执行后置钩子
                         if (rpcHook != null) {
                             rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
                         }
 
                         if (!cmd.isOnewayRPC()) {
+                            // 非Oneway，需要作响应
                             if (response != null) {
                                 response.setOpaque(opaque);
                                 response.markResponseType();
@@ -176,6 +188,7 @@ public abstract class NettyRemotingAbstract {
             };
 
             if (pair.getObject1().rejectRequest()) {
+                // 是否拒绝请求
                 final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY,
                     "[REJECTREQUEST]system busy, start flow control for a while");
                 response.setOpaque(opaque);
@@ -184,7 +197,10 @@ public abstract class NettyRemotingAbstract {
             }
 
             try {
+                // 构建请求执行任务
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
+
+                // 提交请求任务
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {
                 if ((System.currentTimeMillis() % 10000) == 0) {
@@ -215,18 +231,26 @@ public abstract class NettyRemotingAbstract {
      * 处理响应命令
      */
     public void processResponseCommand(ChannelHandlerContext ctx, RemotingCommand cmd) {
+
         final int opaque = cmd.getOpaque();
+
+        // 从响应表中获取Response
         final ResponseFuture responseFuture = responseTable.get(opaque);
         if (responseFuture != null) {
+
+            // 设置response
             responseFuture.setResponseCommand(cmd);
 
             responseFuture.release();
 
+            // 移除响应
             responseTable.remove(opaque);
 
             if (responseFuture.getInvokeCallback() != null) {
+                // 若异步请求时，回调
                 executeInvokeCallback(responseFuture);
             } else {
+                // 设置response，并结束等待，与上述setResponseCommand重复
                 responseFuture.putResponse(cmd);
             }
         } else {
@@ -299,31 +323,47 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    // 同步调用实现
     public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
+
+        // opaque用于标识某次请求
         final int opaque = request.getOpaque();
 
         try {
+
+            // 构建异步响应对象，内部使用CountDownLatch(1)作超时等待
             final ResponseFuture responseFuture = new ResponseFuture(opaque, timeoutMillis, null, null);
+
+            // 将响应对象放入响应表
             this.responseTable.put(opaque, responseFuture);
+
             final SocketAddress addr = channel.remoteAddress();
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture f) throws Exception {
+                    // 请求完成
+
                     if (f.isSuccess()) {
+                        // 请求成功
                         responseFuture.setSendRequestOK(true);
                         return;
                     } else {
+                        // 请求失败
                         responseFuture.setSendRequestOK(false);
                     }
 
+                    // 移除响应对象
                     responseTable.remove(opaque);
+                    // 设置失败异常
                     responseFuture.setCause(f.cause());
+                    // 停止响应等待
                     responseFuture.putResponse(null);
                     PLOG.warn("send a request command to channel <" + addr + "> failed.");
                 }
             });
 
+            // 超时等待响应
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
             if (null == responseCommand) {
                 if (responseFuture.isSendRequestOK()) {
@@ -336,6 +376,7 @@ public abstract class NettyRemotingAbstract {
 
             return responseCommand;
         } finally {
+            // 移除响应对象
             this.responseTable.remove(opaque);
         }
     }
