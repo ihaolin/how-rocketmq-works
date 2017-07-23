@@ -789,4 +789,16 @@ private RemotingCommand updateAndCreateTopic(ChannelHandlerContext ctx, Remoting
 
 ```
 
+### 5.心跳处理
+
+通信组件本身不处理心跳，由上层进行心跳处理，即请求码为`HEART_BEAT`。
+
+### 6.连接复用
+
+同一个网络连接(**Channel**)，客户端多个线程可以同时发送请求，应答/响应通过header中的**opaque**字段来标识。
+
+### 7.超时连接
+
+如果某个连接超过特定时间没有活动(无读写事件)，则自动关闭此连接，并通知上层业务，清除连接对应的注册信息。
+
 以上则是，**RocketMQ**中通信相关的细节基础，后期会介绍**NameServer**，**Broker Server**等内部核心的通信接口处理。
