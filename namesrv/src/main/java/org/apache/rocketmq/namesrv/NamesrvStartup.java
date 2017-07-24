@@ -78,17 +78,25 @@ public class NamesrvStartup {
                 return null;
             }
 
+            // NameServer相关配置
             final NamesrvConfig namesrvConfig = new NamesrvConfig();
+
+            // NettyServer相关配置
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+
+            // 服务监听端口
             nettyServerConfig.setListenPort(9876);
+
             if (commandLine.hasOption('c')) {
 
-                // 从配置文件解析配置
+                // 是否有配置文件
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
                     InputStream in = new BufferedInputStream(new FileInputStream(file));
                     properties = new Properties();
                     properties.load(in);
+
+                    // 将配置文件中的配置
                     MixAll.properties2Object(properties, namesrvConfig);
                     MixAll.properties2Object(properties, nettyServerConfig);
 
@@ -111,16 +119,18 @@ public class NamesrvStartup {
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
 
             if (null == namesrvConfig.getRocketmqHome()) {
+                // RocketMQ Home not set
                 System.out.printf("Please set the " + MixAll.ROCKETMQ_HOME_ENV
                     + " variable in your environment to match the location of the RocketMQ installation%n");
                 System.exit(-2);
             }
 
-            // $ROCKETMQ_HOME/conf/logback_namesrv.xml为日志配置文件
+            // 日志配置
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
             configurator.setContext(lc);
             lc.reset();
+            // $ROCKETMQ_HOME/conf/logback_namesrv.xml为日志配置文件
             configurator.doConfigure(namesrvConfig.getRocketmqHome() + "/conf/logback_namesrv.xml");
             final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
@@ -128,12 +138,13 @@ public class NamesrvStartup {
             MixAll.printObjectProperties(log, namesrvConfig);
             MixAll.printObjectProperties(log, nettyServerConfig);
 
+            // 构建NamesrvController
             final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
-            // 初始化NamesrvController
+            // 初始化NamesrvController，初始化内部各种组件
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
