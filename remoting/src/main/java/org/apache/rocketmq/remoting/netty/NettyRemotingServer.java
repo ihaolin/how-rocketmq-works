@@ -131,6 +131,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+
+        // 初始化netty线程池
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
             nettyServerConfig.getServerWorkerThreads(),
             new ThreadFactory() {
@@ -145,7 +147,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector).channel(NioServerSocketChannel.class)
-                // 最大积压的客户端连接数
+                // 最大积压的已经完成握手但还未被accept的连接数
                 .option(ChannelOption.SO_BACKLOG, 1024)
                 // 让端口释放后立即就可以被再次使用(http://www.cnblogs.com/mydomain/archive/2011/08/23/2150567.html)
                 .option(ChannelOption.SO_REUSEADDR, true)
@@ -161,10 +163,14 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                     public void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline().addLast(
                             defaultEventExecutorGroup,
+                            // 协议编码，RemotingCommand -> byte[]
                             new NettyEncoder(),
+                            // 协议解码，byte[] -> RemotingCommand
                             new NettyDecoder(),
                             new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
+                            // Netty连接事件相关处理
                             new NettyConnetManageHandler(),
+                            // 该处理器用于接收消息前置处理
                             new NettyServerHandler());
                     }
                 });
@@ -183,7 +189,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
 
         if (this.channelEventListener != null) {
-            this.nettyEventExecuter.start();
+            // 启动Netty事件执行器
+            this.nettyEventExecutor.start();
         }
 
         this.timer.scheduleAtFixedRate(new TimerTask() {
@@ -211,8 +218,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
             this.eventLoopGroupSelector.shutdownGracefully();
 
-            if (this.nettyEventExecuter != null) {
-                this.nettyEventExecuter.shutdown();
+            if (this.nettyEventExecutor != null) {
+                this.nettyEventExecutor.shutdown();
             }
 
             if (this.defaultEventExecutorGroup != null) {

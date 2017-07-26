@@ -45,7 +45,9 @@ import org.slf4j.LoggerFactory;
  * </p>
  */
 public class NamesrvStartup {
+
     public static Properties properties = null;
+
     public static CommandLine commandLine = null;
 
     public static void main(String[] args) {

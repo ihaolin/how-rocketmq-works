@@ -36,23 +36,53 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NamesrvController {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+    /**
+     * NameServer相关配置
+     */
     private final NamesrvConfig namesrvConfig;
 
+    /**
+     * Netty通信相关配置
+     */
     private final NettyServerConfig nettyServerConfig;
 
+    /**
+     * 调度服务
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "NSScheduledThread"));
+
+    /**
+     * KV配置管理器
+     */
     private final KVConfigManager kvConfigManager;
+
+    /**
+     * 路由信息管理
+     */
     private final RouteInfoManager routeInfoManager;
 
+    /**
+     * Netty Server实现
+     */
     private RemotingServer remotingServer;
 
+    /**
+     * Broker管理服务
+     */
     private BrokerHousekeepingService brokerHousekeepingService;
 
+    /**
+     * 请求执行线程池
+     */
     private ExecutorService remotingExecutor;
 
+    /**
+     * 全配置对象
+     */
     private Configuration configuration;
 
     public NamesrvController(NamesrvConfig namesrvConfig, NettyServerConfig nettyServerConfig) {
