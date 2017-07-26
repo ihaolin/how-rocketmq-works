@@ -147,6 +147,7 @@ public class NamesrvStartup {
             // 初始化NamesrvController，初始化内部各种组件
             boolean initResult = controller.initialize();
             if (!initResult) {
+                // 初始化失败，关闭
                 controller.shutdown();
                 System.exit(-3);
             }

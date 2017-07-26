@@ -73,14 +73,14 @@ public class NamesrvController {
         // 加载kv配置
         this.kvConfigManager.load();
 
-        // 初始化NettyRemotingServer
+        // 初始化通信组件Server
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
-        // 执行任务的线程池
+        // 初始化请求处理线程池
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
-        // 注册NettyRemotingServer处理器
+        // 注册请求处理器
         this.registerProcessor();
 
         // 每10秒扫描非存活的Broker
@@ -116,13 +116,19 @@ public class NamesrvController {
     }
 
     public void start() throws Exception {
-        // 启动NettyRemotingServer
+        // 启动Server
         this.remotingServer.start();
     }
 
     public void shutdown() {
+
+        // 关闭Server
         this.remotingServer.shutdown();
+
+        // 关闭请求处理线程池
         this.remotingExecutor.shutdown();
+
+        // 关闭任务调度服务
         this.scheduledExecutorService.shutdown();
     }
 
