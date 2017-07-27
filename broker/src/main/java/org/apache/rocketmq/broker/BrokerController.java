@@ -657,10 +657,14 @@ public class BrokerController {
     }
 
     public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway) {
+
+        // 构建本地topic信息
         TopicConfigSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildTopicConfigSerializeWrapper();
 
         if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
             || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
+            // Broker不可读，或不可写时
+            // 更新当前Broker所有topic的权限
             ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<String, TopicConfig>();
             for (TopicConfig topicConfig : topicConfigWrapper.getTopicConfigTable().values()) {
                 TopicConfig tmp =
@@ -671,25 +675,30 @@ public class BrokerController {
             topicConfigWrapper.setTopicConfigTable(topicConfigTable);
         }
 
+        // 发起注册请求
         RegisterBrokerResult registerBrokerResult = this.brokerOuterAPI.registerBrokerAll(
-            this.brokerConfig.getBrokerClusterName(),
-            this.getBrokerAddr(),
-            this.brokerConfig.getBrokerName(),
-            this.brokerConfig.getBrokerId(),
-            this.getHAServerAddr(),
-            topicConfigWrapper,
-            this.filterServerManager.buildNewFilterServerList(),
-            oneway,
-            this.brokerConfig.getRegisterBrokerTimeoutMills());
+            this.brokerConfig.getBrokerClusterName(),               // 集群名称
+            this.getBrokerAddr(),                                   // Broker对外地址
+            this.brokerConfig.getBrokerName(),                      // Broker名称
+            this.brokerConfig.getBrokerId(),                        // BrokerId
+            this.getHAServerAddr(),                                 // Broker对内地址
+            topicConfigWrapper,                                     // Topic信息
+            this.filterServerManager.buildNewFilterServerList(),    // FilterServer地址列表
+            oneway,                                                 // 是否是Oneway调用
+            this.brokerConfig.getRegisterBrokerTimeoutMills());     // 注册超时时间(毫秒)
 
         if (registerBrokerResult != null) {
+            // 非Oneway调用时
             if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
+                // 更新haServer地址
                 this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
             }
 
+            // Slave设置Broker地址
             this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
             if (checkOrderConfig) {
+                // 更新本地topic信息
                 this.getTopicConfigManager().updateOrderTopicConfig(registerBrokerResult.getKvTable());
             }
         }

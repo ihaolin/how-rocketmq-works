@@ -30,9 +30,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class TopAddressing {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
+
     private String nsAddr;
+
     private String wsAddr;
+
     private String unitName;
 
     public TopAddressing(final String wsAddr) {

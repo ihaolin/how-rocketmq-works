@@ -48,9 +48,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class BrokerOuterAPI {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
+
     private final RemotingClient remotingClient;
+
     private final TopAddressing topAddressing = new TopAddressing(MixAll.WS_ADDR);
+
     private String nameSrvAddr = null;
 
     public BrokerOuterAPI(final NettyClientConfig nettyClientConfig) {
@@ -109,12 +113,16 @@ public class BrokerOuterAPI {
         final int timeoutMills) {
         RegisterBrokerResult registerBrokerResult = null;
 
+        // 向各NameServer发起注册请求
         List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
         if (nameServerAddressList != null) {
             for (String namesrvAddr : nameServerAddressList) {
                 try {
+
+                    // 注册Broker
                     RegisterBrokerResult result = this.registerBroker(namesrvAddr, clusterName, brokerAddr, brokerName, brokerId,
                         haServerAddr, topicConfigWrapper, filterServerList, oneway, timeoutMills);
+
                     if (result != null) {
                         registerBrokerResult = result;
                     }
@@ -142,6 +150,8 @@ public class BrokerOuterAPI {
         final int timeoutMills
     ) throws RemotingCommandException, MQBrokerException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
         InterruptedException {
+
+        // 构造Request Header
         RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
         requestHeader.setBrokerAddr(brokerAddr);
         requestHeader.setBrokerId(brokerId);
@@ -150,24 +160,33 @@ public class BrokerOuterAPI {
         requestHeader.setHaServerAddr(haServerAddr);
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER, requestHeader);
 
+        // 构造Request Body
         RegisterBrokerBody requestBody = new RegisterBrokerBody();
+        // Topic信息
         requestBody.setTopicConfigSerializeWrapper(topicConfigWrapper);
+        // FilterServer列表
         requestBody.setFilterServerList(filterServerList);
+        // JSON编码
         request.setBody(requestBody.encode());
 
         if (oneway) {
             try {
+                // Oneway调用
                 this.remotingClient.invokeOneway(namesrvAddr, request, timeoutMills);
             } catch (RemotingTooMuchRequestException e) {
                 // Ignore
             }
+            // 不关心响应结果
             return null;
         }
 
+        // 同步调用
         RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
         assert response != null;
         switch (response.getCode()) {
             case ResponseCode.SUCCESS: {
+
+                // 获取相应结果
                 RegisterBrokerResponseHeader responseHeader =
                     (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);
                 RegisterBrokerResult result = new RegisterBrokerResult();

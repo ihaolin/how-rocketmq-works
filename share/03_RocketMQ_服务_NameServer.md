@@ -304,6 +304,92 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
 ```java
 // BrokerController.java
+public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway) {
+
+    // 构建本地topic信息
+    TopicConfigSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildTopicConfigSerializeWrapper();
+
+    if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
+        || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
+        // Broker不可读，或不可写时
+        // 更新当前Broker所有topic的权限
+        ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<String, TopicConfig>();
+        for (TopicConfig topicConfig : topicConfigWrapper.getTopicConfigTable().values()) {
+            TopicConfig tmp =
+                new TopicConfig(topicConfig.getTopicName(), topicConfig.getReadQueueNums(), topicConfig.getWriteQueueNums(),
+                    this.brokerConfig.getBrokerPermission());
+            topicConfigTable.put(topicConfig.getTopicName(), tmp);
+        }
+        topicConfigWrapper.setTopicConfigTable(topicConfigTable);
+    }
+
+    // 发起注册请求
+    RegisterBrokerResult registerBrokerResult = this.brokerOuterAPI.registerBrokerAll(
+        this.brokerConfig.getBrokerClusterName(),               // 集群名称
+        this.getBrokerAddr(),                                   // Broker对外地址
+        this.brokerConfig.getBrokerName(),                      // Broker名称
+        this.brokerConfig.getBrokerId(),                        // BrokerId
+        this.getHAServerAddr(),                                 // Broker对内地址
+        topicConfigWrapper,                                     // Topic信息
+        this.filterServerManager.buildNewFilterServerList(),    // FilterServer地址列表
+        oneway,                                                 // 是否是Oneway调用
+        this.brokerConfig.getRegisterBrokerTimeoutMills());     // 注册超时时间(毫秒)
+
+    if (registerBrokerResult != null) {
+        // 非Oneway调用时
+        if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
+            // 更新haServer地址
+            this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
+        }
+
+        // Slave设置Broker地址
+        this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
+
+        if (checkOrderConfig) {
+            // 更新本地topic信息
+            this.getTopicConfigManager().updateOrderTopicConfig(registerBrokerResult.getKvTable());
+        }
+    }
+}
+```
+```java
+// BrokerOuterAPI.java
+public RegisterBrokerResult registerBrokerAll(
+    final String clusterName,
+    final String brokerAddr,
+    final String brokerName,
+    final long brokerId,
+    final String haServerAddr,
+    final TopicConfigSerializeWrapper topicConfigWrapper,
+    final List<String> filterServerList,
+    final boolean oneway,
+    final int timeoutMills) {
+    RegisterBrokerResult registerBrokerResult = null;
+
+    // 向各NameServer发起注册请求
+    List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
+    if (nameServerAddressList != null) {
+        for (String namesrvAddr : nameServerAddressList) {
+            try {
+
+                // 注册Broker
+                RegisterBrokerResult result = this.registerBroker(namesrvAddr, clusterName, brokerAddr, brokerName, brokerId,
+                    haServerAddr, topicConfigWrapper, filterServerList, oneway, timeoutMills);
+
+                if (result != null) {
+                    registerBrokerResult = result;
+                }
+
+                log.info("register broker to name server {} OK", namesrvAddr);
+            } catch (Exception e) {
+                log.warn("registerBroker Exception, {}", namesrvAddr, e);
+            }
+        }
+    }
+
+    return registerBrokerResult;
+}
+
 
 ```
 
