@@ -23,20 +23,36 @@ import org.apache.rocketmq.common.constant.PermName;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
 public class BrokerConfig {
+
     private String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY, System.getenv(MixAll.ROCKETMQ_HOME_ENV));
+
     @ImportantField
     private String namesrvAddr = System.getProperty(MixAll.NAMESRV_ADDR_PROPERTY, System.getenv(MixAll.NAMESRV_ADDR_ENV));
+
+    /**
+     * 面向外部的IP地址，如客户端
+     */
     @ImportantField
     private String brokerIP1 = RemotingUtil.getLocalAddress();
+
+    /**
+     * 面向内部的IP地址，如Broker Slave
+     */
     private String brokerIP2 = RemotingUtil.getLocalAddress();
+
     @ImportantField
     private String brokerName = localHostName();
+
     @ImportantField
     private String brokerClusterName = "DefaultCluster";
+
     @ImportantField
     private long brokerId = MixAll.MASTER_ID;
+
     private int brokerPermission = PermName.PERM_READ | PermName.PERM_WRITE;
+
     private int defaultTopicQueueNums = 8;
+
     @ImportantField
     private boolean autoCreateTopicEnable = true;
 

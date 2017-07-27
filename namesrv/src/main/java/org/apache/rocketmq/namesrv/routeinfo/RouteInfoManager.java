@@ -111,19 +111,27 @@ public class RouteInfoManager {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
+
+                // 加写锁
                 this.lock.writeLock().lockInterruptibly();
 
+                // 获取集群下的所有brokers
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
+                    // 不存在则创建
                     brokerNames = new HashSet<String>();
                     this.clusterAddrTable.put(clusterName, brokerNames);
                 }
+                // 添加broker
                 brokerNames.add(brokerName);
 
+                // 是否首次注册
                 boolean registerFirst = false;
-
+                // 获取broker数据信息
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
+
+                    // 不存在则创建
                     registerFirst = true;
                     brokerData = new BrokerData();
                     brokerData.setBrokerName(brokerName);
@@ -132,13 +140,16 @@ public class RouteInfoManager {
 
                     this.brokerAddrTable.put(brokerName, brokerData);
                 }
+                // 添加当前broker到映射表
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
                 registerFirst = registerFirst || (null == oldAddr);
 
-                if (null != topicConfigWrapper //
-                    && MixAll.MASTER_ID == brokerId) {
-                    if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())//
-                        || registerFirst) {
+                if (null != topicConfigWrapper && MixAll.MASTER_ID == brokerId) {
+                    // 如果topic信息不为空，且为master
+
+                    if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion()) || registerFirst) {
+                        // topic配置发生变化，或者是broker首次注册
+
                         ConcurrentHashMap<String, TopicConfig> tcTable =
                             topicConfigWrapper.getTopicConfigTable();
                         if (tcTable != null) {
@@ -149,6 +160,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 更新存活Broker表
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -156,10 +168,12 @@ public class RouteInfoManager {
                         channel,
                         haServerAddr));
                 if (null == prevBrokerLiveInfo) {
+                    // 第一次注册
                     log.info("new broker registerd, {} HAServer: {}", brokerAddr, haServerAddr);
                 }
 
                 if (filterServerList != null) {
+                    // 更新FilterServer
                     if (filterServerList.isEmpty()) {
                         this.filterServerTable.remove(brokerAddr);
                     } else {
@@ -168,6 +182,8 @@ public class RouteInfoManager {
                 }
 
                 if (MixAll.MASTER_ID != brokerId) {
+                    // 如果是slave
+                    // 在相应结果中返回master和haServer
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
                         BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);

@@ -25,8 +25,20 @@ import java.util.Map;
 import org.apache.rocketmq.common.MixAll;
 
 public class BrokerData implements Comparable<BrokerData> {
+
+    /**
+     * 集群名称
+     */
     private String cluster;
+
+    /**
+     * Broker名称
+     */
     private String brokerName;
+
+    /**
+     * brokerId -> brokerAddr
+     */
     private HashMap<Long/* brokerId */, String/* broker address */> brokerAddrs;
 
     public String selectBrokerAddr() {

@@ -235,10 +235,10 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         topicConfig.setPerm(requestHeader.getPerm());
         topicConfig.setTopicSysFlag(requestHeader.getTopicSysFlag() == null ? 0 : requestHeader.getTopicSysFlag());
 
-        // 持久化topic
+        // 持久化topic消息
         this.brokerController.getTopicConfigManager().updateTopicConfig(topicConfig);
 
-        // 注册当前broker到NameServer
+        // 同步当前Broker信息，到NameServer
         this.brokerController.registerBrokerAll(false, true);
 
         // 外部不再作响应

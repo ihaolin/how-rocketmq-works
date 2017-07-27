@@ -298,7 +298,4 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 ```
 以上，则是**NameServer**服务启动的相关细节，之后则是处理来自其他组件的请求。
 
-## Broker管理
-
-
-## 路由信息管理
+## Broker及路由信息管理
