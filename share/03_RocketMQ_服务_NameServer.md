@@ -299,3 +299,16 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 以上，则是**NameServer**服务启动的相关细节，之后则是处理来自其他组件的请求。
 
 ## Broker及路由信息管理
+
+在**NameServer**中，Broker及路由信息是有Broker主动发起的，主要通过[BrokerController](../broker/src/main/java/org/apache/rocketmq/broker/BrokerController.java)的`registerBrokerAll()`方法实现：
+
+```java
+// BrokerController.java
+
+```
+
+当NameServer接收到请求后，会实时更新Broker及路由信息：
+
+```java
+
+```

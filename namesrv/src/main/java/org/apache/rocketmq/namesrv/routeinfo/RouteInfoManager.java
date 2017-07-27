@@ -169,7 +169,7 @@ public class RouteInfoManager {
                         haServerAddr));
                 if (null == prevBrokerLiveInfo) {
                     // 第一次注册
-                    log.info("new broker registerd, {} HAServer: {}", brokerAddr, haServerAddr);
+                    log.info("a new broker registered, {} HAServer: {}", brokerAddr, haServerAddr);
                 }
 
                 if (filterServerList != null) {
