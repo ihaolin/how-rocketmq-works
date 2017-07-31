@@ -190,9 +190,12 @@ public class BrokerOuterAPI {
                 RegisterBrokerResponseHeader responseHeader =
                     (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);
                 RegisterBrokerResult result = new RegisterBrokerResult();
+                // 设置master
                 result.setMasterAddr(responseHeader.getMasterAddr());
+                // 设置haServer
                 result.setHaServerAddr(responseHeader.getHaServerAddr());
                 if (response.getBody() != null) {
+                    // 设置kv配置
                     result.setKvTable(KVTable.decode(response.getBody(), KVTable.class));
                 }
                 return result;

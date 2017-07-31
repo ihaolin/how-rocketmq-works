@@ -698,7 +698,7 @@ public class BrokerController {
             this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
             if (checkOrderConfig) {
-                // 更新本地topic信息
+                // 更新本地有序topic信息
                 this.getTopicConfigManager().updateOrderTopicConfig(registerBrokerResult.getKvTable());
             }
         }

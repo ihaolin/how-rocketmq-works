@@ -46,13 +46,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class RouteInfoManager {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * Topic及队列信息
+     */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+
+    /**
+     * Broker信息
+     */
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+
+    /**
+     * Broker集群信息
+     */
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+
+    /**
+     * 存活的Broker信息
+     */
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+
+    /**
+     * Broker的FilterServer信息
+     */
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
@@ -115,23 +136,23 @@ public class RouteInfoManager {
                 // 加写锁
                 this.lock.writeLock().lockInterruptibly();
 
-                // 获取集群下的所有brokers
+                // 获取集群下的所有broker
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
-                    // 不存在则创建
+                    // 不存在，则创建集群
                     brokerNames = new HashSet<String>();
                     this.clusterAddrTable.put(clusterName, brokerNames);
                 }
                 // 添加broker
                 brokerNames.add(brokerName);
 
-                // 是否首次注册
+                // broker是否首次注册
                 boolean registerFirst = false;
                 // 获取broker数据信息
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
 
-                    // 不存在则创建
+                    // 不存在，则创建
                     registerFirst = true;
                     brokerData = new BrokerData();
                     brokerData.setBrokerName(brokerName);
@@ -145,15 +166,15 @@ public class RouteInfoManager {
                 registerFirst = registerFirst || (null == oldAddr);
 
                 if (null != topicConfigWrapper && MixAll.MASTER_ID == brokerId) {
-                    // 如果topic信息不为空，且为master
+                    // 如果topic配置信息不为空，且为master
 
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion()) || registerFirst) {
                         // topic配置发生变化，或者是broker首次注册
 
-                        ConcurrentHashMap<String, TopicConfig> tcTable =
-                            topicConfigWrapper.getTopicConfigTable();
+                        ConcurrentHashMap<String, TopicConfig> tcTable = topicConfigWrapper.getTopicConfigTable();
                         if (tcTable != null) {
                             for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
+                                // 创建或更新队列信息
                                 this.createAndUpdateQueueData(brokerName, entry.getValue());
                             }
                         }
@@ -194,6 +215,7 @@ public class RouteInfoManager {
                     }
                 }
             } finally {
+                // 释放写锁
                 this.lock.writeLock().unlock();
             }
         } catch (Exception e) {

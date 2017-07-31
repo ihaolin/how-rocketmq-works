@@ -390,11 +390,128 @@ public RegisterBrokerResult registerBrokerAll(
     return registerBrokerResult;
 }
 
+private RegisterBrokerResult registerBroker(
+    final String namesrvAddr,
+    final String clusterName,
+    final String brokerAddr,
+    final String brokerName,
+    final long brokerId,
+    final String haServerAddr,
+    final TopicConfigSerializeWrapper topicConfigWrapper,
+    final List<String> filterServerList,
+    final boolean oneway,
+    final int timeoutMills
+) throws RemotingCommandException, MQBrokerException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
+    InterruptedException {
 
+    // 构造Request Header
+    RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
+    requestHeader.setBrokerAddr(brokerAddr);
+    requestHeader.setBrokerId(brokerId);
+    requestHeader.setBrokerName(brokerName);
+    requestHeader.setClusterName(clusterName);
+    requestHeader.setHaServerAddr(haServerAddr);
+    RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER, requestHeader);
+
+    // 构造Request Body
+    RegisterBrokerBody requestBody = new RegisterBrokerBody();
+    // Topic信息
+    requestBody.setTopicConfigSerializeWrapper(topicConfigWrapper);
+    // FilterServer列表
+    requestBody.setFilterServerList(filterServerList);
+    // JSON编码
+    request.setBody(requestBody.encode());
+
+    if (oneway) {
+        try {
+            // Oneway调用
+            this.remotingClient.invokeOneway(namesrvAddr, request, timeoutMills);
+        } catch (RemotingTooMuchRequestException e) {
+            // Ignore
+        }
+        // 不关心响应结果
+        return null;
+    }
+
+    // 同步调用
+    RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
+    assert response != null;
+    switch (response.getCode()) {
+        case ResponseCode.SUCCESS: {
+
+            // 获取相应结果
+            RegisterBrokerResponseHeader responseHeader =
+                (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);
+            RegisterBrokerResult result = new RegisterBrokerResult();
+            // 设置master
+            result.setMasterAddr(responseHeader.getMasterAddr());
+            // 设置haServer
+            result.setHaServerAddr(responseHeader.getHaServerAddr());
+            if (response.getBody() != null) {
+                // 设置kv配置
+                result.setKvTable(KVTable.decode(response.getBody(), KVTable.class));
+            }
+            return result;
+        }
+        default:
+            break;
+    }
+
+    throw new MQBrokerException(response.getCode(), response.getRemark());
+}
 ```
 
-当NameServer接收到请求后，会实时更新Broker及路由信息：
+当**NameServer**接收到请求后，会实时更新**Broker**及路由信息，主要由[DefaultRequestProcessor](../namesrv/src/main/java/org/apache/rocketmq/namesrv/processor/DefaultRequestProcessor.java)的`registerBrokerWithFilterServer()`方法处理：
 
 ```java
+// DefaultRequestProcessor.java
+public RemotingCommand registerBrokerWithFilterServer(ChannelHandlerContext ctx, RemotingCommand request)
+        throws RemotingCommandException {
+
+    // 构建Response
+    final RemotingCommand response = RemotingCommand.createResponseCommand(RegisterBrokerResponseHeader.class);
+
+    // 构建Response Header
+    final RegisterBrokerResponseHeader responseHeader = (RegisterBrokerResponseHeader) response.readCustomHeader();
+
+    // 反解Request Header
+    final RegisterBrokerRequestHeader requestHeader =
+        (RegisterBrokerRequestHeader) request.decodeCommandCustomHeader(RegisterBrokerRequestHeader.class);
+
+    // 反解Request Body
+    RegisterBrokerBody registerBrokerBody = new RegisterBrokerBody();
+    if (request.getBody() != null) {
+        registerBrokerBody = RegisterBrokerBody.decode(request.getBody(), RegisterBrokerBody.class);
+    } else {
+        registerBrokerBody.getTopicConfigSerializeWrapper().getDataVersion().setCounter(new AtomicLong(0));
+        registerBrokerBody.getTopicConfigSerializeWrapper().getDataVersion().setTimestamp(0);
+    }
+
+    // 注册Broker
+    RegisterBrokerResult result = this.namesrvController.getRouteInfoManager().registerBroker(
+        requestHeader.getClusterName(),
+        requestHeader.getBrokerAddr(),
+        requestHeader.getBrokerName(),
+        requestHeader.getBrokerId(),
+        requestHeader.getHaServerAddr(),
+        registerBrokerBody.getTopicConfigSerializeWrapper(),
+        registerBrokerBody.getFilterServerList(),
+        ctx.channel());
+
+    responseHeader.setHaServerAddr(result.getHaServerAddr());
+    responseHeader.setMasterAddr(result.getMasterAddr());
+
+    // 返回Topic配置信息
+    byte[] jsonValue = this.namesrvController.getKvConfigManager().getKVListByNamespace(NamesrvUtil.NAMESPACE_ORDER_TOPIC_CONFIG);
+    response.setBody(jsonValue);
+
+    response.setCode(ResponseCode.SUCCESS);
+    response.setRemark(null);
+    return response;
+}
+```
+**路由信息**主要由[RouteInfoManager](../namesrv/src/main/java/org/apache/rocketmq/namesrv/routeinfo/RouteInfoManager.java)实现：
+```java
+// RouteInfoManager.java
 
 ```
