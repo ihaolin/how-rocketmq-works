@@ -12,3 +12,6 @@ devenv
 !LICENSE-BIN
 .DS_Store
 
+env/b1-m/store
+env/b1-s0/store
+

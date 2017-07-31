@@ -635,6 +635,7 @@ public class BrokerController {
 
         this.registerBrokerAll(true, false);
 
+        // 10s后，每隔30s注册一次Broker信息
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override

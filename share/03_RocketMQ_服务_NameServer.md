@@ -513,5 +513,110 @@ public RemotingCommand registerBrokerWithFilterServer(ChannelHandlerContext ctx,
 **路由信息**主要由[RouteInfoManager](../namesrv/src/main/java/org/apache/rocketmq/namesrv/routeinfo/RouteInfoManager.java)实现：
 ```java
 // RouteInfoManager.java
+public RegisterBrokerResult registerBroker(
+    final String clusterName,
+    final String brokerAddr,
+    final String brokerName,
+    final long brokerId,
+    final String haServerAddr,
+    final TopicConfigSerializeWrapper topicConfigWrapper,
+    final List<String> filterServerList,
+    final Channel channel) {
+    RegisterBrokerResult result = new RegisterBrokerResult();
+    try {
+        try {
 
+            // 加写锁
+            this.lock.writeLock().lockInterruptibly();
+
+            // 获取集群下的所有broker
+            Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
+            if (null == brokerNames) {
+                // 不存在，则创建集群
+                brokerNames = new HashSet<String>();
+                this.clusterAddrTable.put(clusterName, brokerNames);
+            }
+            // 添加broker
+            brokerNames.add(brokerName);
+
+            // broker是否首次注册
+            boolean registerFirst = false;
+            // 获取broker数据信息
+            BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+            if (null == brokerData) {
+
+                // 不存在，则创建
+                registerFirst = true;
+                brokerData = new BrokerData();
+                brokerData.setBrokerName(brokerName);
+                HashMap<Long, String> brokerAddrs = new HashMap<Long, String>();
+                brokerData.setBrokerAddrs(brokerAddrs);
+
+                this.brokerAddrTable.put(brokerName, brokerData);
+            }
+            // 添加当前broker到映射表
+            String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
+            registerFirst = registerFirst || (null == oldAddr);
+
+            if (null != topicConfigWrapper && MixAll.MASTER_ID == brokerId) {
+                // 如果topic配置信息不为空，且为master
+
+                if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion()) || registerFirst) {
+                    // topic配置发生变化，或者是broker首次注册
+
+                    ConcurrentHashMap<String, TopicConfig> tcTable = topicConfigWrapper.getTopicConfigTable();
+                    if (tcTable != null) {
+                        for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
+                            // 创建或更新队列信息
+                            this.createAndUpdateQueueData(brokerName, entry.getValue());
+                        }
+                    }
+                }
+            }
+
+            // 更新存活Broker表
+            BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
+                new BrokerLiveInfo(
+                    System.currentTimeMillis(),
+                    topicConfigWrapper.getDataVersion(),
+                    channel,
+                    haServerAddr));
+            if (null == prevBrokerLiveInfo) {
+                // 第一次注册
+                log.info("a new broker registered, {} HAServer: {}", brokerAddr, haServerAddr);
+            }
+
+            if (filterServerList != null) {
+                // 更新FilterServer
+                if (filterServerList.isEmpty()) {
+                    this.filterServerTable.remove(brokerAddr);
+                } else {
+                    this.filterServerTable.put(brokerAddr, filterServerList);
+                }
+            }
+
+            if (MixAll.MASTER_ID != brokerId) {
+                // 如果是slave
+                // 在相应结果中返回master和haServer
+                String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
+                if (masterAddr != null) {
+                    BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);
+                    if (brokerLiveInfo != null) {
+                        result.setHaServerAddr(brokerLiveInfo.getHaServerAddr());
+                        result.setMasterAddr(masterAddr);
+                    }
+                }
+            }
+        } finally {
+            // 释放写锁
+            this.lock.writeLock().unlock();
+        }
+    } catch (Exception e) {
+        log.error("registerBroker Exception", e);
+    }
+
+    return result;
+}
 ```
+**Broker**启动之后，会每隔30s注册本地信息到**NameServer**，若超过120s未注册过，则认为该Broker已失效。
+
