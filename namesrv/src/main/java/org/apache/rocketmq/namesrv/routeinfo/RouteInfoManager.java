@@ -48,11 +48,16 @@ import org.slf4j.LoggerFactory;
 public class RouteInfoManager {
 
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+
+    /**
+     * broker网络通道超时时间为120s
+     */
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
+
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     /**
-     * Topic及队列信息
+     * Topic及队列元信息
      */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
 
@@ -174,7 +179,7 @@ public class RouteInfoManager {
                         ConcurrentHashMap<String, TopicConfig> tcTable = topicConfigWrapper.getTopicConfigTable();
                         if (tcTable != null) {
                             for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
-                                // 创建或更新队列信息
+                                // 创建或更新队列元信息
                                 this.createAndUpdateQueueData(brokerName, entry.getValue());
                             }
                         }
@@ -235,6 +240,8 @@ public class RouteInfoManager {
     }
 
     private void createAndUpdateQueueData(final String brokerName, final TopicConfig topicConfig) {
+
+        // 队列元信息
         QueueData queueData = new QueueData();
         queueData.setBrokerName(brokerName);
         queueData.setWriteQueueNums(topicConfig.getWriteQueueNums());
@@ -256,8 +263,10 @@ public class RouteInfoManager {
                 QueueData qd = it.next();
                 if (qd.getBrokerName().equals(brokerName)) {
                     if (qd.equals(queueData)) {
+                        // 同一Broker中，已经存在该QueueData
                         addNewOne = false;
                     } else {
+                        // QueueData已发生变更，则移除
                         log.info("topic changed, {} OLD: {} NEW: {}", topicConfig.getTopicName(), qd,
                             queueData);
                         it.remove();
@@ -397,10 +406,13 @@ public class RouteInfoManager {
     }
 
     public TopicRouteData pickupTopicRouteData(final String topic) {
+
         TopicRouteData topicRouteData = new TopicRouteData();
+
         boolean foundQueueData = false;
         boolean foundBrokerData = false;
-        Set<String> brokerNameSet = new HashSet<String>();
+
+        // 设置broker信息
         List<BrokerData> brokerDataList = new LinkedList<BrokerData>();
         topicRouteData.setBrokerDatas(brokerDataList);
 
@@ -409,9 +421,15 @@ public class RouteInfoManager {
 
         try {
             try {
+
                 this.lock.readLock().lockInterruptibly();
+
+                Set<String> brokerNameSet = new HashSet<String>();
+
                 List<QueueData> queueDataList = this.topicQueueTable.get(topic);
                 if (queueDataList != null) {
+
+                    // 设置队列元信息
                     topicRouteData.setQueueDatas(queueDataList);
                     foundQueueData = true;
 
@@ -424,12 +442,14 @@ public class RouteInfoManager {
                     for (String brokerName : brokerNameSet) {
                         BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                         if (null != brokerData) {
+
                             BrokerData brokerDataClone = new BrokerData();
                             brokerDataClone.setBrokerName(brokerData.getBrokerName());
-                            brokerDataClone.setBrokerAddrs((HashMap<Long, String>) brokerData
-                                .getBrokerAddrs().clone());
+                            brokerDataClone.setBrokerAddrs((HashMap<Long, String>) brokerData.getBrokerAddrs().clone());
                             brokerDataList.add(brokerDataClone);
                             foundBrokerData = true;
+
+                            // FilterServer信息
                             for (final String brokerAddr : brokerDataClone.getBrokerAddrs().values()) {
                                 List<String> filterServerList = this.filterServerTable.get(brokerAddr);
                                 filterServerMap.put(brokerAddr, filterServerList);
@@ -782,10 +802,29 @@ public class RouteInfoManager {
     }
 }
 
+/**
+ * 存活Broker信息
+ */
 class BrokerLiveInfo {
+
+    /**
+     * 最近更新时间
+     */
     private long lastUpdateTimestamp;
+
+    /**
+     * 本地数据版本
+     */
     private DataVersion dataVersion;
+
+    /**
+     * 对应网络通道
+     */
     private Channel channel;
+
+    /**
+     * haServer地址
+     */
     private String haServerAddr;
 
     public BrokerLiveInfo(long lastUpdateTimestamp, DataVersion dataVersion, Channel channel,

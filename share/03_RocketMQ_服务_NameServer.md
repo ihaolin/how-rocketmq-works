@@ -1,6 +1,6 @@
 # RocketMQ服务之NameServer
 
-之前的讲述中，已经提到**RocketMQ**中的**NameServer**是专门设计的轻量级**名称服务**，其具有简单、可集群横吐扩展、无状态等特点。其主要负责：
+之前的讲述中，已经提到**RocketMQ**中的**NameServer**是专门设计的轻量级**名称服务**，其具有简单、可集群横吐扩展、无状态(大部分数据在内存)等特点。其主要负责：
 
 1. **Broker**集群管理；
 2. **路由**信息管理。
@@ -298,7 +298,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 ```
 以上，则是**NameServer**服务启动的相关细节，之后则是处理来自其他组件的请求。
 
-## Broker及路由信息管理
+## Broker集群管理
 
 在**NameServer**中，Broker及路由信息是有Broker主动发起的，主要通过[BrokerController](../broker/src/main/java/org/apache/rocketmq/broker/BrokerController.java)的`registerBrokerAll()`方法实现：
 
@@ -619,4 +619,78 @@ public RegisterBrokerResult registerBroker(
 }
 ```
 **Broker**启动之后，会每隔30s注册本地信息到**NameServer**，若超过120s未注册过，则认为该Broker已失效。
+
+## 路由信息查询
+
+当客户端(**Producer**/**Consumer**)启动时，会从**NameServer**获取Topic路由信息([TopicRouteData](../common/src/main/java/org/apache/rocketmq/common/protocol/route/TopicRouteData.java))，如代码片段：
+
+```java
+// RouteInfoManager
+public TopicRouteData pickupTopicRouteData(final String topic) {
+
+    TopicRouteData topicRouteData = new TopicRouteData();
+
+    boolean foundQueueData = false;
+    boolean foundBrokerData = false;
+
+    // 设置broker信息
+    List<BrokerData> brokerDataList = new LinkedList<BrokerData>();
+    topicRouteData.setBrokerDatas(brokerDataList);
+
+    HashMap<String, List<String>> filterServerMap = new HashMap<String, List<String>>();
+    topicRouteData.setFilterServerTable(filterServerMap);
+
+    try {
+        try {
+
+            this.lock.readLock().lockInterruptibly();
+
+            Set<String> brokerNameSet = new HashSet<String>();
+
+            List<QueueData> queueDataList = this.topicQueueTable.get(topic);
+            if (queueDataList != null) {
+
+                // 设置队列元信息
+                topicRouteData.setQueueDatas(queueDataList);
+                foundQueueData = true;
+
+                Iterator<QueueData> it = queueDataList.iterator();
+                while (it.hasNext()) {
+                    QueueData qd = it.next();
+                    brokerNameSet.add(qd.getBrokerName());
+                }
+
+                for (String brokerName : brokerNameSet) {
+                    BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+                    if (null != brokerData) {
+                        
+                        BrokerData brokerDataClone = new BrokerData();
+                        brokerDataClone.setBrokerName(brokerData.getBrokerName());
+                        brokerDataClone.setBrokerAddrs((HashMap<Long, String>) brokerData.getBrokerAddrs().clone());
+                        brokerDataList.add(brokerDataClone);
+                        foundBrokerData = true;
+
+                        // FilterServer信息
+                        for (final String brokerAddr : brokerDataClone.getBrokerAddrs().values()) {
+                            List<String> filterServerList = this.filterServerTable.get(brokerAddr);
+                            filterServerMap.put(brokerAddr, filterServerList);
+                        }
+                    }
+                }
+            }
+        } finally {
+            this.lock.readLock().unlock();
+        }
+    } catch (Exception e) {
+        log.error("pickupTopicRouteData Exception", e);
+    }
+
+    if (foundBrokerData && foundQueueData) {
+        return topicRouteData;
+    }
+
+    return null;
+}
+```
+以上，则是有关**NameServer**的集群，路由等管理实现。
 

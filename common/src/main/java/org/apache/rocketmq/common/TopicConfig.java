@@ -22,15 +22,15 @@ public class TopicConfig {
 
     private static final String SEPARATOR = " ";
 
-    public static int defaultReadQueueNums = 16;
+    private static final int DEFAULT_READ_QUEUE_NUM = 16;
 
-    public static int defaultWriteQueueNums = 16;
+    private static final int DEFAULT_WRITE_QUEUE_NUM = 16;
 
     private String topicName;
 
-    private int readQueueNums = defaultReadQueueNums;
+    private int readQueueNums = DEFAULT_READ_QUEUE_NUM;
 
-    private int writeQueueNums = defaultWriteQueueNums;
+    private int writeQueueNums = DEFAULT_WRITE_QUEUE_NUM;
 
     /**
      * Topic读写权限控制
