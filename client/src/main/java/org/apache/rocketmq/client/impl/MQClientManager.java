@@ -25,9 +25,16 @@ import org.apache.rocketmq.remoting.RPCHook;
 import org.slf4j.Logger;
 
 public class MQClientManager {
+
     private final static Logger log = ClientLogger.getLog();
+
     private static MQClientManager instance = new MQClientManager();
+
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
+
+    /**
+     * 每个clientId对应一个Client实例
+     */
     private ConcurrentHashMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<String, MQClientInstance>();
 
@@ -47,6 +54,7 @@ public class MQClientManager {
         String clientId = clientConfig.buildMQClientId();
         MQClientInstance instance = this.factoryTable.get(clientId);
         if (null == instance) {
+            // 初始化客户端实例
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
