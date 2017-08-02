@@ -54,7 +54,10 @@ public class BrokerStartup {
 
     public static BrokerController start(BrokerController controller) {
         try {
+
+            // 启动BrokerController
             controller.start();
+
             String tip = "The broker[" + controller.getBrokerConfig().getBrokerName() + ", "
                 + controller.getBrokerAddr() + "] boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
 
@@ -63,6 +66,7 @@ public class BrokerStartup {
             }
 
             log.info(tip);
+
             return controller;
         } catch (Throwable e) {
             e.printStackTrace();
@@ -73,18 +77,21 @@ public class BrokerStartup {
     }
 
     public static BrokerController createBrokerController(String[] args) {
+
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
+            // send buffer: 128k
             NettySystemConfig.socketSndbufSize = 131072;
         }
 
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_RCVBUF_SIZE)) {
+            // receive buffer: 128k
             NettySystemConfig.socketRcvbufSize = 131072;
         }
 
         try {
-            //PackageConflictDetect.detectFastjson();
+
             Options options = ServerUtil.buildCommandlineOptions(new Options());
             commandLine = ServerUtil.parseCmdLine("mqbroker", args, buildCommandlineOptions(options),
                 new PosixParser());
@@ -92,10 +99,17 @@ public class BrokerStartup {
                 System.exit(-1);
             }
 
+            // Broker配置
             final BrokerConfig brokerConfig = new BrokerConfig();
+
+            // NettyServer配置
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
-            final NettyClientConfig nettyClientConfig = new NettyClientConfig();
             nettyServerConfig.setListenPort(10911);
+
+            // NettyClient配置
+            final NettyClientConfig nettyClientConfig = new NettyClientConfig();
+
+            // MessageStore配置
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
 
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
@@ -103,6 +117,7 @@ public class BrokerStartup {
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
 
+            // 仅打印当前配置信息
             if (commandLine.hasOption('p')) {
                 MixAll.printObjectProperties(null, brokerConfig);
                 MixAll.printObjectProperties(null, nettyServerConfig);
@@ -118,6 +133,7 @@ public class BrokerStartup {
             }
 
             if (commandLine.hasOption('c')) {
+                // 从配置文件中读取配置
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
                     configFile = file;
@@ -136,6 +152,7 @@ public class BrokerStartup {
                 }
             }
 
+            // 从命令行获取配置
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
 
             if (null == brokerConfig.getRocketmqHome()) {
@@ -144,6 +161,7 @@ public class BrokerStartup {
                 System.exit(-2);
             }
 
+            // 校验nameServer地址
             String namesrvAddr = brokerConfig.getNamesrvAddr();
             if (null != namesrvAddr) {
                 try {
@@ -159,6 +177,7 @@ public class BrokerStartup {
                 }
             }
 
+            // 校验Broker角色
             switch (messageStoreConfig.getBrokerRole()) {
                 case ASYNC_MASTER:
                 case SYNC_MASTER:
@@ -175,7 +194,10 @@ public class BrokerStartup {
                     break;
             }
 
+            // 设置Ha监听端口，listenPort + 1
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
+
+            // 初始化日志配置
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
             configurator.setContext(lc);
@@ -188,14 +210,17 @@ public class BrokerStartup {
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
 
+            // 构建BrokerController
             final BrokerController controller = new BrokerController(//
                 brokerConfig, //
                 nettyServerConfig, //
                 nettyClientConfig, //
                 messageStoreConfig);
+
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
+            // 初始化BrokerController
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
