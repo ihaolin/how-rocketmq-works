@@ -141,7 +141,7 @@ public class BrokerStartup {
                     properties = new Properties();
                     properties.load(in);
 
-                    parsePropertie2SystemEnv(properties);
+                    parseProperties2SystemEnv(properties);
                     MixAll.properties2Object(properties, brokerConfig);
                     MixAll.properties2Object(properties, nettyServerConfig);
                     MixAll.properties2Object(properties, nettyClientConfig);
@@ -181,6 +181,7 @@ public class BrokerStartup {
             switch (messageStoreConfig.getBrokerRole()) {
                 case ASYNC_MASTER:
                 case SYNC_MASTER:
+                    // 根据brokerRole，设置brokerId
                     brokerConfig.setBrokerId(MixAll.MASTER_ID);
                     break;
                 case SLAVE:
@@ -255,7 +256,7 @@ public class BrokerStartup {
         return null;
     }
 
-    private static void parsePropertie2SystemEnv(Properties properties) {
+    private static void parseProperties2SystemEnv(Properties properties) {
         if (properties == null) {
             return;
         }
