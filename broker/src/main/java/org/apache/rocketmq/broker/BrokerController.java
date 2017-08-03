@@ -87,49 +87,173 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class BrokerController {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
+
     private static final Logger LOG_PROTECTION = LoggerFactory.getLogger(LoggerName.PROTECTION_LOGGER_NAME);
+
     private static final Logger LOG_WATER_MARK = LoggerFactory.getLogger(LoggerName.WATER_MARK_LOGGER_NAME);
+
+    /**
+     * Broker配置
+     */
     private final BrokerConfig brokerConfig;
+
+    /**
+     * NettyServer配置
+     */
     private final NettyServerConfig nettyServerConfig;
+
+    /**
+     * NettyClient配置
+     */
     private final NettyClientConfig nettyClientConfig;
+
+    /**
+     * 消息存储配置
+     */
     private final MessageStoreConfig messageStoreConfig;
+
+    /**
+     * 消费进度管理器
+     */
     private final ConsumerOffsetManager consumerOffsetManager;
+
+    /**
+     * 消费者管理器
+     */
     private final ConsumerManager consumerManager;
+
+    /**
+     * 生产者管理器
+     */
     private final ProducerManager producerManager;
+
+    /**
+     * 客户端Channel事件处理服务
+     */
     private final ClientHousekeepingService clientHousekeepingService;
+
+    /**
+     * 消息拉取请求处理器
+     */
     private final PullMessageProcessor pullMessageProcessor;
+
     private final PullRequestHoldService pullRequestHoldService;
+
+    /**
+     * 消息到达监听器
+     */
     private final MessageArrivingListener messageArrivingListener;
+
+
     private final Broker2Client broker2Client;
+
+    /**
+     * 订阅组管理器
+     */
     private final SubscriptionGroupManager subscriptionGroupManager;
+
+
     private final ConsumerIdsChangeListener consumerIdsChangeListener;
+
+
     private final RebalanceLockManager rebalanceLockManager = new RebalanceLockManager();
+
+    /**
+     * Broker外部调用API
+     */
     private final BrokerOuterAPI brokerOuterAPI;
+
+    /**
+     * 调度服务线程池
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "BrokerControllerScheduledThread"));
+
+    /**
+     * Slave同步服务
+     */
     private final SlaveSynchronize slaveSynchronize;
+
     private final BlockingQueue<Runnable> sendThreadPoolQueue;
+
     private final BlockingQueue<Runnable> pullThreadPoolQueue;
+
     private final BlockingQueue<Runnable> clientManagerThreadPoolQueue;
+
     private final BlockingQueue<Runnable> consumerManagerThreadPoolQueue;
+
+    /**
+     * FilterServer管理器
+     */
     private final FilterServerManager filterServerManager;
+
+    /**
+     * Broker状态管理器
+     */
     private final BrokerStatsManager brokerStatsManager;
+
+    /**
+     * 消息发送钩子
+     */
     private final List<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
+
+    /**
+     * 消息消费钩子
+     */
     private final List<ConsumeMessageHook> consumeMessageHookList = new ArrayList<ConsumeMessageHook>();
+
+    /**
+     * 消息存储服务
+     */
     private MessageStore messageStore;
+
+    /**
+     * Netty Server服务
+     */
     private RemotingServer remotingServer;
+
     private RemotingServer fastRemotingServer;
+
+    /**
+     * Topic配置管理器
+     */
     private TopicConfigManager topicConfigManager;
+
+    /**
+     * 消息发送处理线程池
+     */
     private ExecutorService sendMessageExecutor;
+
+    /**
+     * 消息拉取处理线程池
+     */
     private ExecutorService pullMessageExecutor;
+
     private ExecutorService adminBrokerExecutor;
+
+    /**
+     * 客户端管理线程池
+     */
     private ExecutorService clientManageExecutor;
+
+    /**
+     * 消费者管理线程池
+     */
     private ExecutorService consumerManageExecutor;
+
     private boolean updateMasterHAServerAddrPeriodically = false;
+
+    /**
+     * Broker状态
+     */
     private BrokerStats brokerStats;
+
     private InetSocketAddress storeHost;
+
     private BrokerFastFailure brokerFastFailure;
+
     private Configuration configuration;
 
     public BrokerController(//
@@ -645,11 +769,14 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
+
         if (this.messageStore != null) {
+            // 启动消息存储服务
             this.messageStore.start();
         }
 
         if (this.remotingServer != null) {
+            // 启动通信服务
             this.remotingServer.start();
         }
 
@@ -658,6 +785,7 @@ public class BrokerController {
         }
 
         if (this.brokerOuterAPI != null) {
+            // 启动外部客户端RPC调用服务
             this.brokerOuterAPI.start();
         }
 
