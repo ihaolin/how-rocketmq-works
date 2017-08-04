@@ -139,6 +139,9 @@ public class BrokerController {
      */
     private final PullMessageProcessor pullMessageProcessor;
 
+    /**
+     * 拉取消息请求服务
+     */
     private final PullRequestHoldService pullRequestHoldService;
 
     /**
@@ -154,10 +157,15 @@ public class BrokerController {
      */
     private final SubscriptionGroupManager subscriptionGroupManager;
 
-
+    /**
+     * 消费者ID变化见监听器
+     */
     private final ConsumerIdsChangeListener consumerIdsChangeListener;
 
 
+    /**
+     * 负载均衡锁管理器
+     */
     private final RebalanceLockManager rebalanceLockManager = new RebalanceLockManager();
 
     /**
@@ -214,6 +222,12 @@ public class BrokerController {
      */
     private RemotingServer remotingServer;
 
+    /**
+     * Netty Server服务
+     * <p>
+     *   VIP Channel使用，remotingServer端口 - 2
+     * </p>
+     */
     private RemotingServer fastRemotingServer;
 
     /**
@@ -231,6 +245,9 @@ public class BrokerController {
      */
     private ExecutorService pullMessageExecutor;
 
+    /**
+     * 默认请求处理线程池
+     */
     private ExecutorService adminBrokerExecutor;
 
     /**
@@ -351,7 +368,7 @@ public class BrokerController {
             // 初始化通信服务Server
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
 
-            // TODO
+            // 初始化VIP Channel的通信服务Server
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
@@ -528,13 +545,9 @@ public class BrokerController {
 
     public void registerProcessor() {
 
-        /**
-         * SendMessageProcessor
-         */
         SendMessageProcessor sendProcessor = new SendMessageProcessor(this);
         sendProcessor.registerSendMessageHook(sendMessageHookList);
         sendProcessor.registerConsumeMessageHook(consumeMessageHookList);
-
         this.remotingServer.registerProcessor(RequestCode.SEND_MESSAGE, sendProcessor, this.sendMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.SEND_MESSAGE_V2, sendProcessor, this.sendMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.CONSUMER_SEND_MSG_BACK, sendProcessor, this.sendMessageExecutor);
@@ -542,53 +555,32 @@ public class BrokerController {
         this.fastRemotingServer.registerProcessor(RequestCode.SEND_MESSAGE_V2, sendProcessor, this.sendMessageExecutor);
         this.fastRemotingServer.registerProcessor(RequestCode.CONSUMER_SEND_MSG_BACK, sendProcessor, this.sendMessageExecutor);
 
-        /**
-         * PullMessageProcessor
-         */
         this.remotingServer.registerProcessor(RequestCode.PULL_MESSAGE, this.pullMessageProcessor, this.pullMessageExecutor);
         this.pullMessageProcessor.registerConsumeMessageHook(consumeMessageHookList);
 
-        /**
-         * QueryMessageProcessor
-         */
         NettyRequestProcessor queryProcessor = new QueryMessageProcessor(this);
         this.remotingServer.registerProcessor(RequestCode.QUERY_MESSAGE, queryProcessor, this.pullMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.VIEW_MESSAGE_BY_ID, queryProcessor, this.pullMessageExecutor);
-
         this.fastRemotingServer.registerProcessor(RequestCode.QUERY_MESSAGE, queryProcessor, this.pullMessageExecutor);
         this.fastRemotingServer.registerProcessor(RequestCode.VIEW_MESSAGE_BY_ID, queryProcessor, this.pullMessageExecutor);
 
-        /**
-         * ClientManageProcessor
-         */
         ClientManageProcessor clientProcessor = new ClientManageProcessor(this);
         this.remotingServer.registerProcessor(RequestCode.HEART_BEAT, clientProcessor, this.clientManageExecutor);
         this.remotingServer.registerProcessor(RequestCode.UNREGISTER_CLIENT, clientProcessor, this.clientManageExecutor);
-
         this.fastRemotingServer.registerProcessor(RequestCode.HEART_BEAT, clientProcessor, this.clientManageExecutor);
         this.fastRemotingServer.registerProcessor(RequestCode.UNREGISTER_CLIENT, clientProcessor, this.clientManageExecutor);
 
-        /**
-         * ConsumerManageProcessor
-         */
         ConsumerManageProcessor consumerManageProcessor = new ConsumerManageProcessor(this);
         this.remotingServer.registerProcessor(RequestCode.GET_CONSUMER_LIST_BY_GROUP, consumerManageProcessor, this.consumerManageExecutor);
         this.remotingServer.registerProcessor(RequestCode.UPDATE_CONSUMER_OFFSET, consumerManageProcessor, this.consumerManageExecutor);
         this.remotingServer.registerProcessor(RequestCode.QUERY_CONSUMER_OFFSET, consumerManageProcessor, this.consumerManageExecutor);
-
         this.fastRemotingServer.registerProcessor(RequestCode.GET_CONSUMER_LIST_BY_GROUP, consumerManageProcessor, this.consumerManageExecutor);
         this.fastRemotingServer.registerProcessor(RequestCode.UPDATE_CONSUMER_OFFSET, consumerManageProcessor, this.consumerManageExecutor);
         this.fastRemotingServer.registerProcessor(RequestCode.QUERY_CONSUMER_OFFSET, consumerManageProcessor, this.consumerManageExecutor);
 
-        /**
-         * EndTransactionProcessor
-         */
         this.remotingServer.registerProcessor(RequestCode.END_TRANSACTION, new EndTransactionProcessor(this), this.sendMessageExecutor);
         this.fastRemotingServer.registerProcessor(RequestCode.END_TRANSACTION, new EndTransactionProcessor(this), this.sendMessageExecutor);
 
-        /**
-         * Default
-         */
         AdminBrokerProcessor adminProcessor = new AdminBrokerProcessor(this);
         this.remotingServer.registerDefaultProcessor(adminProcessor, this.adminBrokerExecutor);
         this.fastRemotingServer.registerDefaultProcessor(adminProcessor, this.adminBrokerExecutor);
@@ -781,6 +773,7 @@ public class BrokerController {
         }
 
         if (this.fastRemotingServer != null) {
+            // 启动VIP通道通信服务
             this.fastRemotingServer.start();
         }
 
@@ -794,13 +787,16 @@ public class BrokerController {
         }
 
         if (this.clientHousekeepingService != null) {
+            // 启动Client事件服务
             this.clientHousekeepingService.start();
         }
 
         if (this.filterServerManager != null) {
+            // 启动FilterServer管理器
             this.filterServerManager.start();
         }
 
+        // 注册本地Topic等信息到NameServer
         this.registerBrokerAll(true, false);
 
         // 10s后，每隔30s注册一次Broker信息
@@ -817,10 +813,12 @@ public class BrokerController {
         }, 1000 * 10, 1000 * 30, TimeUnit.MILLISECONDS);
 
         if (this.brokerStatsManager != null) {
+            // 启动Broker状态管理器
             this.brokerStatsManager.start();
         }
 
         if (this.brokerFastFailure != null) {
+            // 启动Broker快速失败服务
             this.brokerFastFailure.start();
         }
     }
