@@ -131,6 +131,7 @@ public class ProducerManager {
 
             if (this.groupChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
+                    // 生产者实例信息
                     HashMap<Channel, ClientChannelInfo> channelTable = this.groupChannelTable.get(group);
                     if (null == channelTable) {
                         channelTable = new HashMap<>();
@@ -139,6 +140,7 @@ public class ProducerManager {
 
                     clientChannelInfoFound = channelTable.get(clientChannelInfo.getChannel());
                     if (null == clientChannelInfoFound) {
+                        // 新实例
                         channelTable.put(clientChannelInfo.getChannel(), clientChannelInfo);
                         log.info("new producer connected, group: {} channel: {}", group,
                             clientChannelInfo.toString());
@@ -148,6 +150,7 @@ public class ProducerManager {
                 }
 
                 if (clientChannelInfoFound != null) {
+                    // 设置更新时间
                     clientChannelInfoFound.setLastUpdateTimestamp(System.currentTimeMillis());
                 }
             } else {

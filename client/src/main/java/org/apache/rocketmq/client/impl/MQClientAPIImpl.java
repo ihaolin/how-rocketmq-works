@@ -845,14 +845,15 @@ public class MQClientAPIImpl {
         this.remotingClient.invokeOneway(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr), request, timeoutMillis);
     }
 
-    public void sendHearbeat(//
-        final String addr, //
-        final HeartbeatData heartbeatData, //
-        final long timeoutMillis//
-    ) throws RemotingException, MQBrokerException, InterruptedException {
+    public void sendHearbeat(final String addr, final HeartbeatData heartbeatData, final long timeoutMillis)
+        throws RemotingException, MQBrokerException, InterruptedException {
+
+        // 构建RemotingCommand
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.HEART_BEAT, null);
 
         request.setBody(heartbeatData.encode());
+
+        // 发送同步请求
         RemotingCommand response = this.remotingClient.invokeSync(addr, request, timeoutMillis);
         assert response != null;
         switch (response.getCode()) {

@@ -412,13 +412,18 @@ public class MQClientInstance {
     }
 
     public void sendHeartbeatToAllBrokerWithLock() {
+
+        // 获取心跳锁
         if (this.lockHeartbeat.tryLock()) {
             try {
+                // 对所有Broker发送心跳
                 this.sendHeartbeatToAllBroker();
+                // 上传FilterClass代码
                 this.uploadFilterClassSource();
             } catch (final Exception e) {
                 log.error("sendHeartbeatToAllBroker exception", e);
             } finally {
+                // 释放心跳锁
                 this.lockHeartbeat.unlock();
             }
         } else {
@@ -475,7 +480,10 @@ public class MQClientInstance {
     }
 
     private void sendHeartbeatToAllBroker() {
+
+        // 构建心跳发送数据
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
+
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
         final boolean consumerEmpty = heartbeatData.getConsumerDataSet().isEmpty();
         if (producerEmpty && consumerEmpty) {
@@ -495,11 +503,14 @@ public class MQClientInstance {
                     String addr = entry1.getValue();
                     if (addr != null) {
                         if (consumerEmpty) {
+                            // 没有消费者
                             if (id != MixAll.MASTER_ID)
+                                // 不是master，则不发送心跳数据
                                 continue;
                         }
 
                         try {
+                            // 发送心跳数据
                             this.mQClientAPIImpl.sendHearbeat(addr, heartbeatData, 3000);
                             if (times % 20 == 0) {
                                 log.info("send heart beat to broker[{} {} {}] success", brokerName, id, addr);
@@ -628,32 +639,48 @@ public class MQClientInstance {
     }
 
     private HeartbeatData prepareHeartbeatData() {
+
         HeartbeatData heartbeatData = new HeartbeatData();
 
         // clientID
         heartbeatData.setClientID(this.clientId);
 
-        // Consumer
+        // Consumer集
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
+
                 ConsumerData consumerData = new ConsumerData();
+
+                // 消费者组名
                 consumerData.setGroupName(impl.groupName());
+
+                // 消费者类型，Pull or Push
                 consumerData.setConsumeType(impl.consumeType());
+
+                // 消费模式，集群 or 广播
                 consumerData.setMessageModel(impl.messageModel());
+
+                // 消费起始点
                 consumerData.setConsumeFromWhere(impl.consumeFromWhere());
+
+                // 订阅信息
                 consumerData.getSubscriptionDataSet().addAll(impl.subscriptions());
+
+                //
                 consumerData.setUnitMode(impl.isUnitMode());
 
                 heartbeatData.getConsumerDataSet().add(consumerData);
             }
         }
 
-        // Producer
+        // Producer集
         for (Map.Entry<String/* group */, MQProducerInner> entry : this.producerTable.entrySet()) {
             MQProducerInner impl = entry.getValue();
             if (impl != null) {
                 ProducerData producerData = new ProducerData();
+
+                // 生产者组名
                 producerData.setGroupName(entry.getKey());
 
                 heartbeatData.getProducerDataSet().add(producerData);

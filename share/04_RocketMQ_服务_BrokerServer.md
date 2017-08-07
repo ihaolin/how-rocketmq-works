@@ -516,8 +516,260 @@ public void start() throws Exception {
 主要由[MQClientAPIImpl](../client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java)类实现：
 
 ```java
+// MQClientAPIImpl.java
+public void sendHeartbeatToAllBrokerWithLock() {
 
+    // 获取心跳锁
+    if (this.lockHeartbeat.tryLock()) {
+        try {
+            // 对所有Broker发送心跳
+            this.sendHeartbeatToAllBroker();
+            // 上传FilterClass代码
+            this.uploadFilterClassSource();
+        } catch (final Exception e) {
+            log.error("sendHeartbeatToAllBroker exception", e);
+        } finally {
+            // 释放心跳锁
+            this.lockHeartbeat.unlock();
+        }
+    } else {
+        log.warn("lock heartBeat, but failed.");
+    }
+}
+
+private void sendHeartbeatToAllBroker() {
+
+    // 构建心跳发送数据
+    // 包括clientId，生产者，消费者信息
+    final HeartbeatData heartbeatData = this.prepareHeartbeatData();
+
+    final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
+    final boolean consumerEmpty = heartbeatData.getConsumerDataSet().isEmpty();
+    if (producerEmpty && consumerEmpty) {
+        log.warn("sending heartbeat, but no consumer and no producer");
+        return;
+    }
+
+    long times = this.storeTimesTotal.getAndIncrement();
+    Iterator<Entry<String, HashMap<Long, String>>> it = this.brokerAddrTable.entrySet().iterator();
+    while (it.hasNext()) {
+        Entry<String, HashMap<Long, String>> entry = it.next();
+        String brokerName = entry.getKey();
+        HashMap<Long, String> oneTable = entry.getValue();
+        if (oneTable != null) {
+            for (Map.Entry<Long, String> entry1 : oneTable.entrySet()) {
+                Long id = entry1.getKey();
+                String addr = entry1.getValue();
+                if (addr != null) {
+                    if (consumerEmpty) {
+                        // 没有消费者
+                        if (id != MixAll.MASTER_ID)
+                            // 不是master，则不发送心跳数据
+                            continue;
+                    }
+
+                    try {
+                        // 发送心跳数据
+                        this.mQClientAPIImpl.sendHearbeat(addr, heartbeatData, 3000);
+                        // ...
+                    } catch (Exception e) {
+                        // ...
+                    }
+                }
+            }
+        }
+    }
+}
+
+public void sendHearbeat(final String addr, final HeartbeatData heartbeatData, final long timeoutMillis)
+        throws RemotingException, MQBrokerException, InterruptedException {
+
+    // 构建RemotingCommand
+    RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.HEART_BEAT, null);
+
+    request.setBody(heartbeatData.encode());
+
+    // 发送同步请求
+    RemotingCommand response = this.remotingClient.invokeSync(addr, request, timeoutMillis);
+    assert response != null;
+    switch (response.getCode()) {
+        case ResponseCode.SUCCESS: {
+            return;
+        }
+        default:
+            break;
+    }
+
+    throw new MQBrokerException(response.getCode(), response.getRemark());
+}
 ```
+
+当Broker接收到心跳请求后，将由[ClientManageProcessor](../broker/src/main/java/org/apache/rocketmq/broker/processor/ClientManageProcessor.java)处理：
+
+```java
+// ClientManageProcessor.java
+public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request)
+    throws RemotingCommandException {
+    switch (request.getCode()) {
+        case RequestCode.HEART_BEAT:
+            // 处理客户端心跳
+            return this.heartBeat(ctx, request);
+        case RequestCode.UNREGISTER_CLIENT:
+            // 处理客户端注销
+            return this.unregisterClient(ctx, request);
+        default:
+            break;
+    }
+    return null;
+}
+
+public RemotingCommand heartBeat(ChannelHandlerContext ctx, RemotingCommand request) {
+
+    // 构建Response
+    RemotingCommand response = RemotingCommand.createResponseCommand(null);
+
+    // 解析心跳数据
+    HeartbeatData heartbeatData = HeartbeatData.decode(request.getBody(), HeartbeatData.class);
+
+    // 构建客户端链接信息
+    ClientChannelInfo clientChannelInfo = new ClientChannelInfo(
+        ctx.channel(),
+        heartbeatData.getClientID(),
+        request.getLanguage(),
+        request.getVersion()
+    );
+
+    // 注册Consumer
+    for (ConsumerData data : heartbeatData.getConsumerDataSet()) {
+
+        // 订阅组配置信息
+        SubscriptionGroupConfig subscriptionGroupConfig =
+            this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(data.getGroupName());
+
+        // 是否通知消费者ID发生变化
+        boolean isNotifyConsumerIdsChangedEnable = true;
+
+        if (null != subscriptionGroupConfig) {
+            isNotifyConsumerIdsChangedEnable = subscriptionGroupConfig.isNotifyConsumerIdsChangedEnable();
+            int topicSysFlag = 0;
+            if (data.isUnitMode()) {
+                topicSysFlag = TopicSysFlag.buildSysFlag(false, true);
+            }
+
+            // retryTopic：%RETRY%{CONSUMER_GROUP}
+            String newTopic = MixAll.getRetryTopic(data.getGroupName());
+
+            // 创建重试Topic
+            this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(
+                newTopic,
+                subscriptionGroupConfig.getRetryQueueNums(),
+                PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
+        }
+
+        // 注册Consumer
+        boolean changed = this.brokerController.getConsumerManager().registerConsumer(
+            data.getGroupName(),
+            clientChannelInfo,
+            data.getConsumeType(),
+            data.getMessageModel(),
+            data.getConsumeFromWhere(),
+            data.getSubscriptionDataSet(),
+            isNotifyConsumerIdsChangedEnable
+        );
+
+        if (changed) {
+            log.info("registerConsumer info changed {} {}",
+                data.toString(),
+                RemotingHelper.parseChannelRemoteAddr(ctx.channel())
+            );
+        }
+    }
+
+    // 注册Producer
+    for (ProducerData data : heartbeatData.getProducerDataSet()) {
+        this.brokerController.getProducerManager().registerProducer(data.getGroupName(), clientChannelInfo);
+    }
+
+    response.setCode(ResponseCode.SUCCESS);
+    response.setRemark(null);
+    return response;
+}
+```
+消费者注册处理：
+
+```java
+// ConsumerManager.java
+public boolean registerConsumer(final String group, final ClientChannelInfo clientChannelInfo,
+    ConsumeType consumeType, MessageModel messageModel, ConsumeFromWhere consumeFromWhere,
+    final Set<SubscriptionData> subList, boolean isNotifyConsumerIdsChangedEnable) {
+
+    ConsumerGroupInfo consumerGroupInfo = this.consumerTable.get(group);
+    if (null == consumerGroupInfo) {
+        // 创建Consumer组
+        ConsumerGroupInfo tmp = new ConsumerGroupInfo(group, consumeType, messageModel, consumeFromWhere);
+        ConsumerGroupInfo prev = this.consumerTable.putIfAbsent(group, tmp);
+        consumerGroupInfo = prev != null ? prev : tmp;
+    }
+
+    // 更新Channel
+    boolean r1 = consumerGroupInfo.updateChannel(clientChannelInfo, consumeType, messageModel, consumeFromWhere);
+
+    // 更新订阅信息
+    boolean r2 = consumerGroupInfo.updateSubscription(subList);
+
+    if (r1 || r2) {
+        // 若有更新
+        if (isNotifyConsumerIdsChangedEnable) {
+            // 通知消费者ID发生变化，作消费Rebalance
+            this.consumerIdsChangeListener.consumerIdsChanged(group, consumerGroupInfo.getAllChannel());
+        }
+    }
+
+    return r1 || r2;
+}
+```
+
+生产者注册处理：
+
+```java
+// ProducerManager.java
+public void registerProducer(final String group, final ClientChannelInfo clientChannelInfo) {
+    try {
+        ClientChannelInfo clientChannelInfoFound = null;
+
+        if (this.groupChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+            try {
+                // 生产者实例信息
+                HashMap<Channel, ClientChannelInfo> channelTable = this.groupChannelTable.get(group);
+                if (null == channelTable) {
+                    channelTable = new HashMap<>();
+                    this.groupChannelTable.put(group, channelTable);
+                }
+
+                clientChannelInfoFound = channelTable.get(clientChannelInfo.getChannel());
+                if (null == clientChannelInfoFound) {
+                    // 新实例
+                    channelTable.put(clientChannelInfo.getChannel(), clientChannelInfo);
+                    log.info("new producer connected, group: {} channel: {}", group,
+                        clientChannelInfo.toString());
+                }
+            } finally {
+                this.groupChannelLock.unlock();
+            }
+
+            if (clientChannelInfoFound != null) {
+                // 设置更新时间
+                clientChannelInfoFound.setLastUpdateTimestamp(System.currentTimeMillis());
+            }
+        } else {
+            log.warn("ProducerManager registerProducer lock timeout");
+        }
+    } catch (InterruptedException e) {
+        log.error("", e);
+    }
+}
+```
+
 
 
 

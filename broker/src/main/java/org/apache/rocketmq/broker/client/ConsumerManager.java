@@ -99,18 +99,22 @@ public class ConsumerManager {
 
         ConsumerGroupInfo consumerGroupInfo = this.consumerTable.get(group);
         if (null == consumerGroupInfo) {
+            // 创建Consumer组
             ConsumerGroupInfo tmp = new ConsumerGroupInfo(group, consumeType, messageModel, consumeFromWhere);
             ConsumerGroupInfo prev = this.consumerTable.putIfAbsent(group, tmp);
             consumerGroupInfo = prev != null ? prev : tmp;
         }
 
-        boolean r1 =
-            consumerGroupInfo.updateChannel(clientChannelInfo, consumeType, messageModel,
-                consumeFromWhere);
+        // 更新Channel
+        boolean r1 = consumerGroupInfo.updateChannel(clientChannelInfo, consumeType, messageModel, consumeFromWhere);
+
+        // 更新订阅信息
         boolean r2 = consumerGroupInfo.updateSubscription(subList);
 
         if (r1 || r2) {
+            // 若有更新
             if (isNotifyConsumerIdsChangedEnable) {
+                // 通知消费者ID发生变化，作消费Rebalance
                 this.consumerIdsChangeListener.consumerIdsChanged(group, consumerGroupInfo.getAllChannel());
             }
         }
