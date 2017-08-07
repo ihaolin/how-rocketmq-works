@@ -149,7 +149,9 @@ public class BrokerController {
      */
     private final MessageArrivingListener messageArrivingListener;
 
-
+    /**
+     * Broker调用Client服务
+     */
     private final Broker2Client broker2Client;
 
     /**
@@ -184,10 +186,19 @@ public class BrokerController {
      */
     private final SlaveSynchronize slaveSynchronize;
 
+    /**
+     * 消息发送请求队列
+     */
     private final BlockingQueue<Runnable> sendThreadPoolQueue;
 
+    /**
+     * 消息拉取请求队列
+     */
     private final BlockingQueue<Runnable> pullThreadPoolQueue;
 
+    /**
+     * 客户端管理请求队列
+     */
     private final BlockingQueue<Runnable> clientManagerThreadPoolQueue;
 
     private final BlockingQueue<Runnable> consumerManagerThreadPoolQueue;
