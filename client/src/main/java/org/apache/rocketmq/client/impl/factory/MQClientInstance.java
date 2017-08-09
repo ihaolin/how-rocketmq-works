@@ -220,6 +220,7 @@ public class MQClientInstance {
         synchronized (this) {
             switch (this.serviceState) {
                 case CREATE_JUST:
+
                     this.serviceState = ServiceState.START_FAILED;
 
                     // 没有设置NameServer，从ws地址获取
@@ -227,19 +228,19 @@ public class MQClientInstance {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
 
-                    // 启动网络通信服务
+                    // 启动NettyClient
                     this.mQClientAPIImpl.start();
 
                     // 启动调度任务
                     this.startScheduledTask();
 
-                    // 启动消息拉取服务
+                    // 启动消息拉取服务，该服务会持续执行消息拉取请求
                     this.pullMessageService.start();
 
-                    // 启动负载服务
+                    // 启动负载服务，该服务会定时作消费者balance
                     this.rebalanceService.start();
 
-                    // 启动消息生产服务
+                    // 启动内部使用的Producer
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
 
                     log.info("the client factory [{}] start OK", this.clientId);
@@ -258,12 +259,14 @@ public class MQClientInstance {
     }
 
     private void startScheduledTask() {
+
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                 @Override
                 public void run() {
                     try {
+                        // 定时拉取NameServer地址
                         MQClientInstance.this.mQClientAPIImpl.fetchNameServerAddr();
                     } catch (Exception e) {
                         log.error("ScheduledTask fetchNameServerAddr exception", e);
@@ -277,6 +280,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 更新Topic路由信息
                     MQClientInstance.this.updateTopicRouteInfoFromNameServer();
                 } catch (Exception e) {
                     log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
@@ -289,7 +293,9 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 清理离线的Broker
                     MQClientInstance.this.cleanOfflineBroker();
+                    // 发送心跳
                     MQClientInstance.this.sendHeartbeatToAllBrokerWithLock();
                 } catch (Exception e) {
                     log.error("ScheduledTask sendHeartbeatToAllBroker exception", e);
@@ -302,6 +308,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 持久化消费进度
                     MQClientInstance.this.persistAllConsumerOffset();
                 } catch (Exception e) {
                     log.error("ScheduledTask persistAllConsumerOffset exception", e);
@@ -314,6 +321,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 调整线程池
                     MQClientInstance.this.adjustThreadPool();
                 } catch (Exception e) {
                     log.error("ScheduledTask adjustThreadPool exception", e);

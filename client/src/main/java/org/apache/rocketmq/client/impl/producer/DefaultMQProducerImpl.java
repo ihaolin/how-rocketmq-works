@@ -158,6 +158,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 this.checkConfig();
 
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
+                    // 设置Producer instanceName为进程号
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
 
@@ -176,13 +177,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
 
                 if (startFactory) {
-                    // 启动Client
+                    // 启动客户端实例
                     mQClientFactory.start();
                 }
 
                 log.info("the producer [{}] start OK. sendMessageWithVIPChannel={}", this.defaultMQProducer.getProducerGroup(),
                     this.defaultMQProducer.isSendMessageWithVIPChannel());
                 this.serviceState = ServiceState.RUNNING;
+
                 break;
             case RUNNING:
             case START_FAILED:
@@ -195,6 +197,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 break;
         }
 
+        // 发送心跳给所有Broker
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
     }
 
