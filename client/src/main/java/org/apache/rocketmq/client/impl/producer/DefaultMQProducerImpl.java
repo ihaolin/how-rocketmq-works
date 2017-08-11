@@ -452,32 +452,66 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback, //
         final long timeout//
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+
+        // 检查Producer状态
         this.makeSureStateOK();
+
+        // 检查消息合法性
         Validators.checkMessage(msg, this.defaultMQProducer);
 
         final long invokeID = random.nextLong();
+        // 消息发送起始时间
         long beginTimestampFirst = System.currentTimeMillis();
+        // 上次消息发送时间
         long beginTimestampPrev = beginTimestampFirst;
+        // 消息发送结束时间
         long endTimestamp = beginTimestampFirst;
+
+        // 查询Topic路由信息
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
+
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
+
+            // 发送至哪个队列
             MessageQueue mq = null;
+
+            // 异常信息
             Exception exception = null;
+
+            // 发送结果
             SendResult sendResult = null;
+
+            // 根据发送模式，计算重试次数
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
+
+            // 已重试多少次
             int times = 0;
+
+            // 失败重试后，已发送过的broker
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal; times++) {
+
+                // 最近选择的broker
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
+
+                // 轮训选择一个消息队列
                 MessageQueue tmpmq = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
                 if (tmpmq != null) {
                     mq = tmpmq;
                     brokersSent[times] = mq.getBrokerName();
                     try {
+                        // 记录发送开始时间
                         beginTimestampPrev = System.currentTimeMillis();
+
+                        // 发送消息
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout);
+
+                        // 记录发送结束时间
                         endTimestamp = System.currentTimeMillis();
+
+                        //
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+
                         switch (communicationMode) {
                             case ASYNC:
                                 return null;
@@ -584,6 +618,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
+            // 从NameServer更新Topic路由信息
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
